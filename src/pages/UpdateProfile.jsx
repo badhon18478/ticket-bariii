@@ -1,12 +1,13 @@
-import { useContext, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../AuthContext';
+// import { AuthContext } from '../AuthContext';
 
 import Navbar from '../components/Navber/Navbar';
 import Footer from '../components/Footer';
+import { useAuth } from '../contexts/AuthProvider';
 
 const UpdateProfile = () => {
-  const { user, updateUserProfile } = useContext(AuthContext);
+  const { user, updateUserProfile } = useAuth();
   const [formData, setFormData] = useState({
     name: user?.displayName || '',
     photoURL: user?.photoURL || '',

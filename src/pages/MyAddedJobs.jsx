@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 // import { AuthContext } from '../contexts/AuthContext';
@@ -15,11 +15,12 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navber/Navbar';
 import Footer from '../components/Footer';
-import { AuthContext } from '../AuthContext';
+// import { AuthContext } from '../AuthContext';
 import useAxiosSecure from '../hooks/useAxiosSecure';
+import { useAuth } from '../contexts/AuthProvider';
 
 const MyAddedJobs = () => {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);

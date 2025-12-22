@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FaBus,
   FaTrain,
@@ -8,37 +8,37 @@ import {
   FaSearch,
   FaStar,
   FaArrowRight,
-  FaCheckCircle,
-  FaShieldAlt,
   FaHeadset,
   FaClock,
   FaMapMarkerAlt,
   FaTicketAlt,
   FaUsers,
   FaRoute,
-  FaPercentage,
+  FaCalendarAlt,
+  FaMobileAlt,
+  FaMoneyBillWave,
+  FaLock,
+  FaShieldAlt,
 } from 'react-icons/fa';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, Navigation } from 'swiper/modules';
+
 import 'swiper/css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
+
 import useAxiosSecure from '../hooks/useAxiosSecure';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TicketCard from '../components/tickets/TicketCard';
 import { useTheme } from '../hooks/useTheme';
-// import { useTheme } from '../contexts/ThemeContext';
-// import { useTheme } from '../contexts/ThemeContext';
 
 const Home = () => {
   const [advertisedTickets, setAdvertisedTickets] = useState([]);
   const [latestTickets, setLatestTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchData, setSearchData] = useState({
-    from: '',
-    to: '',
-    date: '',
-  });
+  const [searchData, setSearchData] = useState({ from: '', to: '', date: '' });
+  const [error, setError] = useState(null);
+
   const { theme } = useTheme();
   const navigate = useNavigate();
   const axiosSecure = useAxiosSecure();
@@ -49,209 +49,271 @@ const Home = () => {
 
   const fetchTickets = async () => {
     try {
-      const [advertised, latest] = await Promise.all([
+      setLoading(true);
+      setError(null);
+
+      const [advertisedRes, latestRes] = await Promise.all([
         axiosSecure.get('/api/tickets/advertised'),
-        axiosSecure.get('/api/tickets/latest?limit=8'),
+        axiosSecure.get('/api/tickets/latest'),
       ]);
 
-      setAdvertisedTickets(advertised.data);
-      setLatestTickets(latest.data);
+      // ✅ FIX: Proper API response handling
+      console.log('Advertised response:', advertisedRes.data);
+      console.log('Latest response:', latestRes.data);
+
+      // Handle both response formats
+      setAdvertisedTickets(
+        advertisedRes.data?.tickets ||
+          advertisedRes.data?.data?.tickets ||
+          advertisedRes.data ||
+          []
+      );
+
+      setLatestTickets(
+        latestRes.data?.tickets ||
+          latestRes.data?.data?.tickets ||
+          latestRes.data ||
+          []
+      );
     } catch (error) {
       console.error('Error fetching tickets:', error);
+      setError('Failed to load tickets. Please try again later.');
+
+      // Fallback to mock data
+      setAdvertisedTickets(generateMockTickets('Featured'));
+      setLatestTickets(generateMockTickets('Latest'));
     } finally {
       setLoading(false);
     }
   };
 
+  const generateMockTickets = type => {
+    const transportTypes = ['bus', 'train', 'launch', 'plane'];
+    const destinations = [
+      'Chittagong',
+      'Sylhet',
+      "Cox's Bazar",
+      'Rajshahi',
+      'Khulna',
+    ];
+    const perksOptions = [
+      ['AC', 'WiFi'],
+      ['Breakfast', 'TV'],
+      ['Lunch', 'Charging Port'],
+      ['Dinner', 'Blanket'],
+      ['Snacks', 'Water'],
+      ['AC', 'WiFi', 'TV'],
+    ];
+
+    return Array(6)
+      .fill(null)
+      .map((_, i) => {
+        const departureDate = new Date();
+        departureDate.setDate(departureDate.getDate() + i + 1);
+
+        return {
+          _id: `${type}-${i}-${Date.now()}`,
+          title: `${type} ${
+            transportTypes[i % 4].charAt(0).toUpperCase() +
+            transportTypes[i % 4].slice(1)
+          } Ticket ${i + 1}`,
+          from: 'Dhaka',
+          to: destinations[i % 5],
+          departure: departureDate.toISOString(),
+          departureTime: `${8 + (i % 12)}:${i % 2 === 0 ? '00' : '30'} ${
+            8 + (i % 12) >= 12 ? 'PM' : 'AM'
+          }`,
+          price: 550 + i * 45,
+          transportType: transportTypes[i % 4],
+          quantity: 25 + i * 3,
+          availableQuantity: 15 + i,
+          perks: perksOptions[i % 6],
+          image: `https://images.unsplash.com/photo-${
+            ['1544620347', '1593642632827', '1566836610'][i % 3]
+          }?auto=format&fit=crop&w=800&q=80`,
+          verificationStatus: 'approved',
+          isAdvertised: type === 'Featured',
+          vendorName: [
+            'Premium Express',
+            'Super Travels',
+            'Green Line',
+            'Shohagh Paribahan',
+          ][i % 4],
+          vendorEmail: 'vendor@example.com',
+          isHidden: false,
+          createdAt: new Date().toISOString(),
+        };
+      });
+  };
+
   const handleSearch = e => {
     e.preventDefault();
     if (searchData.from && searchData.to) {
-      navigate(`/all-tickets?from=${searchData.from}&to=${searchData.to}`);
+      const query = new URLSearchParams({
+        from: searchData.from,
+        to: searchData.to,
+        ...(searchData.date && { date: searchData.date }),
+      }).toString();
+      navigate(`/all-tickets?${query}`);
+    } else {
+      // Show alert if search fields are empty
+      alert('Please enter both From and To locations');
     }
   };
 
-  const getTransportIcon = type => {
-    const icons = {
-      bus: <FaBus className="text-lg" />,
-      train: <FaTrain className="text-lg" />,
-      launch: <FaShip className="text-lg" />,
-      plane: <FaPlane className="text-lg" />,
-    };
-    return icons[type?.toLowerCase()] || <FaBus className="text-lg" />;
-  };
-
-  const popularRoutes = [
-    {
-      from: 'Dhaka',
-      to: 'Chittagong',
-      price: 25,
-      transport: 'bus',
-      duration: '6h',
-    },
-    {
-      from: 'Dhaka',
-      to: 'Sylhet',
-      price: 30,
-      transport: 'train',
-      duration: '7h',
-    },
-    {
-      from: 'Dhaka',
-      to: "Cox's Bazar",
-      price: 35,
-      transport: 'bus',
-      duration: '10h',
-    },
-    {
-      from: 'Chittagong',
-      to: 'Sylhet',
-      price: 28,
-      transport: 'bus',
-      duration: '8h',
-    },
-  ];
-
   const stats = [
     {
-      number: '50K+',
-      label: 'Happy Travelers',
-      icon: <FaUsers className="text-3xl" />,
+      number: '95K+',
+      label: 'Happy Users',
+      icon: <FaUsers className="text-blue-500" />,
     },
     {
-      number: '1000+',
-      label: 'Routes Available',
-      icon: <FaRoute className="text-3xl" />,
+      number: '1.2K+',
+      label: 'Daily Routes',
+      icon: <FaRoute className="text-green-500" />,
     },
     {
       number: '24/7',
-      label: 'Customer Support',
-      icon: <FaHeadset className="text-3xl" />,
+      label: 'Support',
+      icon: <FaHeadset className="text-purple-500" />,
     },
     {
-      number: '99%',
-      label: 'Satisfaction Rate',
-      icon: <FaPercentage className="text-3xl" />,
+      number: '100%',
+      label: 'Secure',
+      icon: <FaShieldAlt className="text-orange-500" />,
     },
   ];
 
+  // ✅ FIX: Improved loading state
   if (loading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <LoadingSpinner />
+          <p className="mt-4 text-gray-600 dark:text-gray-400">
+            Loading tickets...
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen">
-      {/* ========== Hero Section ========== */}
+    <div className="min-h-screen bg-white dark:bg-slate-950 transition-colors duration-500">
+      {/* HERO SECTION */}
       <section
-        className={`relative overflow-hidden py-20 px-4 ${
+        className={`relative pt-28 md:pt-32 pb-20 px-4 overflow-hidden ${
           theme === 'dark'
-            ? 'bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900'
-            : 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800'
+            ? 'bg-slate-950'
+            : 'bg-gradient-to-br from-[#043674] via-[#0E3F88] to-[#0F2F67]'
         }`}
       >
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,#fff_1px,transparent_0)] bg-[size:32px_32px]" />
 
-        <div className="max-w-7xl mx-auto relative z-10">
-          {/* Trust Badge */}
-          <div className="text-center mb-8 animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-              <FaStar className="text-yellow-400 animate-pulse" />
-              <span className="font-semibold text-white">
-                Trusted by 93,250+ travelers
-              </span>
-            </div>
+        <div className="relative max-w-6xl mx-auto text-center">
+          {/* trust badge */}
+          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/12 backdrop-blur-lg border border-white/25 mb-8">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-xs md:text-sm text-slate-50 font-medium">
+              Trusted by 100,000+ travelers
+            </span>
           </div>
 
-          {/* Main Heading */}
-          <div className="text-center mb-12 animate-slide-up">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold mb-4 tracking-tight text-white">
-              Book Your Next
-            </h1>
-            <div className="relative">
-              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold mb-6 tracking-tight bg-gradient-to-r from-orange-400 via-yellow-400 to-orange-400 bg-clip-text text-transparent animate-gradient">
-                Adventure Today
-              </h1>
-            </div>
-            <p className="text-lg md:text-xl text-blue-100 max-w-3xl mx-auto px-4 leading-relaxed">
-              Discover and book bus, train, launch & flight tickets easily.
-              Seamless travel experience at your fingertips.
-            </p>
-          </div>
+          {/* main heading */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white mb-1">
+            Book Your Next
+          </h1>
+          <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B]">
+              Adventure Today
+            </span>
+          </h2>
 
-          {/* Search Box - Image.png style অনুযায়ী */}
-          <div className="max-w-4xl mx-auto mb-16 animate-slide-up delay-200">
+          <p className="text-sm sm:text-base md:text-lg text-blue-100/90 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Discover and book bus, train, launch & flight tickets easily.
+            Seamless travel experience at your fingertips.
+          </p>
+
+          {/* search card */}
+          <div className="max-w-4xl mx-auto">
             <form
               onSubmit={handleSearch}
-              className="bg-white/10 backdrop-blur-lg p-4 md:p-6 rounded-2xl border border-white/20 shadow-2xl"
+              className="bg-white shadow-2xl rounded-[2.5rem] px-4 py-4 md:px-6 md:py-5 flex flex-col md:flex-row gap-3 items-stretch"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* From Location */}
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-blue-500 text-xl" />
-                    <span className="text-gray-500 text-lg">📍</span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="From Location"
-                    value={searchData.from}
-                    onChange={e =>
-                      setSearchData({ ...searchData, from: e.target.value })
-                    }
-                    className="w-full pl-14 pr-4 py-4 bg-white rounded-xl border-2 border-transparent focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all duration-300 text-gray-800 placeholder-gray-500"
-                  />
-                  <div className="absolute -bottom-6 left-0 text-sm text-blue-100 opacity-0 group-hover:opacity-100 transition-opacity">
-                    51 locations available
-                  </div>
-                </div>
-
-                {/* To Location */}
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-green-500 text-xl" />
-                    <span className="text-gray-500 text-lg">📍</span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="To Location"
-                    value={searchData.to}
-                    onChange={e =>
-                      setSearchData({ ...searchData, to: e.target.value })
-                    }
-                    className="w-full pl-14 pr-4 py-4 bg-white rounded-xl border-2 border-transparent focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200 transition-all duration-300 text-gray-800 placeholder-gray-500"
-                  />
-                </div>
-
-                {/* Search Button */}
-                <button
-                  type="submit"
-                  className="group relative overflow-hidden bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
-                >
-                  <div className="flex items-center justify-center gap-3">
-                    <FaSearch className="text-xl group-hover:rotate-12 transition-transform" />
-                    <span className="text-lg">Search Tickets</span>
-                  </div>
-                  <div className="absolute inset-0 bg-white/20 translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-                </button>
+              {/* from */}
+              <div className="relative flex-1">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <FaMapMarkerAlt />
+                </span>
+                <input
+                  type="text"
+                  placeholder="From (e.g., Dhaka)"
+                  required
+                  className="w-full pl-10 pr-4 py-3 md:py-4 rounded-2xl border border-slate-200 text-sm md:text-base outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
+                  value={searchData.from}
+                  onChange={e =>
+                    setSearchData(prev => ({ ...prev, from: e.target.value }))
+                  }
+                />
               </div>
+
+              {/* to */}
+              <div className="relative flex-1">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <FaMapMarkerAlt />
+                </span>
+                <input
+                  type="text"
+                  placeholder="To (e.g., Chittagong)"
+                  required
+                  className="w-full pl-10 pr-4 py-3 md:py-4 rounded-2xl border border-slate-200 text-sm md:text-base outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
+                  value={searchData.to}
+                  onChange={e =>
+                    setSearchData(prev => ({ ...prev, to: e.target.value }))
+                  }
+                />
+              </div>
+
+              {/* date */}
+              <div className="relative flex-[0.9]">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <FaCalendarAlt />
+                </span>
+                <input
+                  type="date"
+                  className="w-full pl-10 pr-4 py-3 md:py-4 rounded-2xl border border-slate-200 text-sm md:text-base outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
+                  value={searchData.date}
+                  onChange={e =>
+                    setSearchData(prev => ({ ...prev, date: e.target.value }))
+                  }
+                />
+              </div>
+
+              {/* button */}
+              <button
+                type="submit"
+                className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-semibold text-sm md:text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:cursor-not-allowed"
+                disabled={!searchData.from || !searchData.to}
+              >
+                <FaSearch />
+                <span>Search Tickets</span>
+              </button>
             </form>
           </div>
 
-          {/* Stats Section - Image.png অনুযায়ী */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto animate-slide-up delay-300">
-            {stats.map((stat, index) => (
+          {/* stats under hero */}
+          <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
+            {stats.map((s, i) => (
               <div
-                key={index}
-                className="text-center group p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-2 cursor-pointer"
+                key={i}
+                className="bg-white/10 backdrop-blur-md rounded-2xl px-3 py-4 border border-white/10 text-left flex flex-col gap-1"
               >
-                <div className="inline-block p-4 rounded-full bg-gradient-to-br from-white/10 to-transparent mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <div className="text-white">{stat.icon}</div>
+                <div className="text-xs text-blue-100/80 flex items-center gap-2">
+                  <span className="text-base">{s.icon}</span>
+                  <span>{s.label}</span>
                 </div>
-                <div className="text-3xl md:text-4xl font-extrabold mb-2 text-white group-hover:text-orange-300 transition-colors">
-                  {stat.number}
-                </div>
-                <div className="text-blue-100 text-sm md:text-base font-medium">
-                  {stat.label}
+                <div className="text-lg sm:text-xl font-bold text-white">
+                  {s.number}
                 </div>
               </div>
             ))}
@@ -259,237 +321,303 @@ const Home = () => {
         </div>
       </section>
 
-      {/* ========== Advertisement Section ========== */}
-      <section className="py-16 px-4 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <span className="inline-block px-5 py-2 rounded-full text-sm font-bold mb-4 bg-gradient-to-r from-orange-500/10 to-orange-600/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
-              🎯 Featured Deals
-            </span>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Advertisement Section
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300 text-lg max-w-2xl mx-auto">
-              Have a place to chat by our team for the best travel experience!
-            </p>
-            {/* Navigation Buttons - Image.png style */}
-            <div className="flex justify-center gap-4 mt-6">
-              <button className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                <FaArrowRight className="rotate-180" />
-              </button>
-              <button className="p-3 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition-colors">
-                <FaArrowRight />
-              </button>
+      {/* 2. STATS SECTION */}
+      <section className="py-12 px-4 -mt-12 relative z-20">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
+          {stats.map((s, i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 text-center hover:-translate-y-2 transition-all duration-300"
+            >
+              <div className="text-3xl mb-3 flex justify-center">{s.icon}</div>
+              <div className="text-2xl font-black text-gray-900 dark:text-white">
+                {s.number}
+              </div>
+              <div className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+                {s.label}
+              </div>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. FEATURED TICKETS */}
+      <section className="py-20 px-4 bg-white dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-end mb-12 gap-4">
+            <div>
+              <h2 className="text-3xl md:text-5xl font-black text-gray-900 dark:text-white mb-4 italic">
+                Featured Offers
+              </h2>
+              <div className="h-1.5 w-24 bg-orange-500 rounded-full" />
+            </div>
+            {advertisedTickets.length > 0 && (
+              <button
+                onClick={() => navigate('/all-tickets')}
+                className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2 hover:translate-x-1 transition-transform"
+              >
+                View All <FaArrowRight />
+              </button>
+            )}
           </div>
 
-          {advertisedTickets.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {advertisedTickets.slice(0, 6).map(ticket => (
-                <TicketCard key={ticket._id} ticket={ticket} />
-              ))}
+          {advertisedTickets.length === 0 ? (
+            <div className="text-center py-16">
+              <FaStar className="text-5xl text-yellow-400 mx-auto mb-4 opacity-60" />
+              <h3 className="text-2xl font-bold text-gray-600 dark:text-gray-400 mb-2">
+                No Featured Tickets Available
+              </h3>
+              <p className="text-gray-500 dark:text-gray-500 max-w-md mx-auto">
+                Check back soon for special offers!
+              </p>
+              {error && (
+                <p className="text-red-500 dark:text-red-400 mt-2 text-sm">
+                  {error}
+                </p>
+              )}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <div className="inline-block p-8 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900">
-                <FaTicketAlt className="text-6xl text-gray-400 dark:text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 text-lg">
-                  No featured tickets available at the moment
-                </p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {advertisedTickets.map(ticket => (
+                <div
+                  key={ticket._id}
+                  className="transform hover:scale-[1.03] transition-all duration-300"
+                >
+                  <TicketCard ticket={ticket} />
+                </div>
+              ))}
             </div>
           )}
         </div>
       </section>
 
-      {/* ========== Latest Tickets Section ========== */}
-      <section className="py-16 px-4 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Latest Tickets
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300 text-lg max-w-2xl mx-auto">
-              Recently added travel options for your next journey
-            </p>
-          </div>
+      {/* 4. SERVICES EXPLORER */}
+      <section className="py-24 px-4 bg-gray-50 dark:bg-gray-900/40">
+        <div className="max-w-7xl mx-auto text-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+            Explore Our Services
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-sm md:text-base">
+            We offer premium travel solutions across multiple transport modes
+            with a focus on safety and comfort.
+          </p>
+        </div>
 
-          {latestTickets.length > 0 ? (
+        <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-8">
+          {[
+            {
+              icon: <FaBus />,
+              label: 'Luxury Bus',
+              desc: 'AC / Non-AC sleeper coaches',
+              color: 'from-blue-500 to-blue-700',
+            },
+            {
+              icon: <FaTrain />,
+              label: 'Express Train',
+              desc: 'Intercity high-speed trains',
+              color: 'from-green-500 to-green-700',
+            },
+            {
+              icon: <FaShip />,
+              label: 'River Cruise',
+              desc: 'Luxury launch cabins',
+              color: 'from-cyan-500 to-cyan-700',
+            },
+            {
+              icon: <FaPlane />,
+              label: 'Air Ticket',
+              desc: 'Domestic & international flights',
+              color: 'from-indigo-500 to-indigo-700',
+            },
+          ].map((item, i) => (
+            <div
+              key={i}
+              className="group cursor-pointer bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-lg hover:shadow-2xl transition-all border border-transparent hover:border-blue-500/30"
+              onClick={() =>
+                navigate('/all-tickets', {
+                  state: {
+                    transportType: item.label.toLowerCase().split(' ')[0],
+                  },
+                })
+              }
+            >
+              <div
+                className={`w-20 h-20 mx-auto bg-gradient-to-br ${item.color} text-white rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-xl group-hover:rotate-6 transition-transform`}
+              >
+                {item.icon}
+              </div>
+              <h4 className="font-black text-xl mb-2 dark:text-white uppercase tracking-wide">
+                {item.label}
+              </h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {item.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 5. LATEST UPDATES CAROUSEL */}
+      <section className="py-20 px-4 dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 text-center flex items-center justify-center gap-4">
+            <FaClock className="text-orange-500" />
+            Recently Added Routes
+          </h2>
+
+          {latestTickets.length === 0 ? (
+            <div className="text-center py-16">
+              <FaClock className="text-5xl text-gray-400 mx-auto mb-4 opacity-60" />
+              <h3 className="text-2xl font-bold text-gray-600 dark:text-gray-400 mb-2">
+                No Recent Tickets
+              </h3>
+              <p className="text-gray-500 dark:text-gray-500 max-w-md mx-auto">
+                New tickets will appear here soon!
+              </p>
+            </div>
+          ) : (
             <Swiper
               modules={[Autoplay, Pagination, Navigation]}
               spaceBetween={30}
               slidesPerView={1}
               breakpoints={{
                 640: { slidesPerView: 2 },
-                1024: { slidesPerView: 4 },
+                1024: { slidesPerView: 3 },
               }}
-              autoplay={{ delay: 3000 }}
-              pagination={{ clickable: true }}
-              navigation
-              className="pb-12"
+              autoplay={{
+                delay: 3500,
+                disableOnInteraction: false,
+              }}
+              pagination={{
+                clickable: true,
+                dynamicBullets: true,
+              }}
+              navigation={true}
+              loop={latestTickets.length > 3}
+              className="pb-16"
             >
               {latestTickets.map(ticket => (
                 <SwiperSlide key={ticket._id}>
-                  <TicketCard ticket={ticket} />
+                  <div className="p-2">
+                    <TicketCard ticket={ticket} />
+                  </div>
                 </SwiperSlide>
               ))}
             </Swiper>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400 text-lg">
-                No tickets available at the moment
-              </p>
-            </div>
           )}
         </div>
       </section>
 
-      {/* ========== Popular Routes Section ========== */}
-      <section className="py-16 px-4 bg-gradient-to-b from-white to-blue-50 dark:from-gray-900 dark:to-blue-900/20">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Popular Routes
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300 text-lg max-w-2xl mx-auto">
-              Most traveled destinations this season
-            </p>
+      {/* 6. WHY CHOOSE US */}
+      <section className="py-24 px-4 bg-gray-50 dark:bg-gray-900/50 overflow-hidden">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-2 items-center gap-20">
+          <div className="relative">
+            <div className="absolute -top-10 -left-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl" />
+
+            <img
+              src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=800"
+              alt="Bus Journey"
+              className="rounded-[3rem] shadow-2xl relative z-10 border-8 border-white dark:border-gray-800 w-full h-auto"
+            />
+
+            <div className="absolute -bottom-10 -right-10 bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-2xl z-20 border-l-8 border-orange-500 animate-pulse">
+              <p className="text-5xl font-black text-gray-900 dark:text-white">
+                12+
+              </p>
+              <p className="text-gray-500 dark:text-gray-400 font-bold">
+                Partnerships
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {popularRoutes.map((route, index) => (
-              <div
-                key={index}
-                className="group bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 hover:-translate-y-2 shadow-lg hover:shadow-xl"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                      {getTransportIcon(route.transport)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900 dark:text-white">
-                        {route.from} → {route.to}
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {route.duration}
-                      </p>
-                    </div>
+          <div className="space-y-8">
+            <h2 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white leading-tight">
+              We focus on <span className="text-blue-600">your comfort</span>
+            </h2>
+
+            <div className="grid gap-6">
+              {[
+                {
+                  icon: <FaClock />,
+                  t: 'Real-time Support',
+                  d: 'Our support team is available 24/7 to assist you.',
+                },
+                {
+                  icon: <FaMoneyBillWave />,
+                  t: 'No Hidden Costs',
+                  d: 'Transparent pricing so you always know what you pay.',
+                },
+                {
+                  icon: <FaShieldAlt />,
+                  t: 'Secure Checkout',
+                  d: 'Bank-level encryption keeps your payments safe.',
+                },
+              ].map((item, i) => (
+                <div key={i} className="flex gap-6 group">
+                  <div className="w-16 h-16 bg-white dark:bg-gray-800 shadow-lg rounded-2xl flex items-center justify-center text-2xl text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold dark:text-white">
+                      {item.t}
+                    </h4>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
+                      {item.d}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                    ${route.price}
-                  </span>
-                  <Link
-                    to={`/all-tickets?from=${route.from}&to=${route.to}`}
-                    className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-sm font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                  >
-                    View Tickets
-                  </Link>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ========== Why Choose Us Section ========== */}
-      <section
-        className={`py-16 px-4 ${
-          theme === 'dark'
-            ? 'bg-gradient-to-br from-blue-900/50 to-indigo-900/50'
-            : 'bg-gradient-to-br from-blue-600 to-indigo-700'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
-              Why Choose TicketBari?
-            </h2>
-            <p className="text-blue-100 text-lg max-w-2xl mx-auto">
-              Your trusted travel partner for seamless booking experience
-            </p>
-          </div>
+      {/* 7. APP DOWNLOAD CTA */}
+      <section className="py-20 px-4">
+        <div
+          className={`max-w-7xl mx-auto rounded-[3.5rem] p-10 md:p-20 relative overflow-hidden ${
+            theme === 'dark' ? 'bg-indigo-950' : 'bg-blue-600'
+          } text-white`}
+        >
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
+            <div className="text-center lg:text-left">
+              <h2 className="text-4xl md:text-6xl font-black mb-6 italic leading-none">
+                Save up to 30%
+              </h2>
+              <p className="text-blue-100 text-lg md:text-xl mb-10 max-w-lg mx-auto lg:mx-0">
+                Download our mobile app and use code{' '}
+                <span className="bg-yellow-400 text-black px-4 py-1 rounded-lg font-bold">
+                  TRAVEL30
+                </span>{' '}
+                on your first booking.
+              </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: '🚀',
-                title: 'Fast Booking',
-                description:
-                  'Book tickets in under 60 seconds with our streamlined process',
-              },
-              {
-                icon: '🛡️',
-                title: 'Secure Payment',
-                description:
-                  'Bank-level security with encrypted payment processing',
-              },
-              {
-                icon: '⭐',
-                title: 'Best Prices',
-                description:
-                  'Guaranteed lowest prices with price match promise',
-              },
-              {
-                icon: '📱',
-                title: 'Mobile App',
-                description:
-                  'Book on the go with our user-friendly mobile application',
-              },
-              {
-                icon: '🎫',
-                title: 'Easy Refunds',
-                description: 'Quick and hassle-free refund process',
-              },
-              {
-                icon: '👥',
-                title: '24/7 Support',
-                description: 'Round-the-clock customer support team',
-              },
-            ].map((feature, index) => (
-              <div
-                key={index}
-                className="group bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:border-white/40 transition-all duration-300 hover:-translate-y-2"
-              >
-                <div className="text-4xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
-                  {feature.icon}
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-blue-100">{feature.description}</p>
+              <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
+                <button className="bg-black flex items-center gap-4 px-8 py-4 rounded-2xl hover:scale-105 transition-transform border border-white/20">
+                  <FaMobileAlt className="text-3xl text-orange-400" />
+                  <div className="text-left leading-tight">
+                    <p className="text-[10px] uppercase opacity-60">
+                      Available on
+                    </p>
+                    <p className="text-lg font-bold">Google Play</p>
+                  </div>
+                </button>
+
+                <button className="bg-white text-black flex items-center gap-4 px-8 py-4 rounded-2xl hover:scale-105 transition-transform shadow-xl">
+                  <FaLock className="text-3xl text-blue-600" />
+                  <div className="text-left leading-tight">
+                    <p className="text-[10px] uppercase opacity-60">
+                      Coming soon on
+                    </p>
+                    <p className="text-lg font-bold">App Store</p>
+                  </div>
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            </div>
 
-      {/* ========== CTA Section ========== */}
-      <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-gradient-to-r from-orange-500/10 to-orange-600/10 dark:from-orange-900/20 dark:to-orange-800/20 rounded-3xl p-8 md:p-12 border border-orange-200 dark:border-orange-800">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              Ready for Your Next Adventure?
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300 text-lg mb-8 max-w-2xl mx-auto">
-              Join thousands of satisfied travelers who trust TicketBari for
-              their journey
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/all-tickets"
-                className="px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
-              >
-                Browse All Tickets
-              </Link>
-              <Link
-                to="/register"
-                className="px-8 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold rounded-xl border-2 border-orange-500 hover:bg-orange-50 dark:hover:bg-gray-700 transition-all duration-300"
-              >
-                Create Free Account
-              </Link>
+            <div className="hidden lg:block relative">
+              <FaMobileAlt className="text-[250px] opacity-10 rotate-12 absolute -top-20 -right-20" />
+              <FaTicketAlt className="text-[200px] opacity-20 -rotate-12" />
             </div>
           </div>
         </div>

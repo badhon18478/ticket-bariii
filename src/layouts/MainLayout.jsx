@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navber/Navbar';
 import { Outlet, useLocation } from 'react-router';
-import Banner from '../components/Banner';
+// import Banner from '../components/Banner';
 import Footer from '../components/Footer';
 
 const MainLayout = () => {

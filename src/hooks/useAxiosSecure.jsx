@@ -1,45 +1,38 @@
+// hooks/useAxiosSecure.js
 import axios from 'axios';
-import { useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../AuthContext';
-
-const instance = axios.create({
-  baseURL: 'https://my-server-nu-ivory.vercel.app',
-});
 
 const useAxiosSecure = () => {
-  const navigate = useNavigate();
-  const { user, signOutUser } = useContext(AuthContext);
+  // Create axios instance
+  const axiosSecure = axios.create({
+    baseURL: import.meta.env.VITE_API_URL, // Vite compatible
+  });
 
-  useEffect(() => {
-    const requestInterceptor = instance.interceptors.request.use(
-      config => {
-        const token = user?.accessToken;
-        if (token) config.headers.authorization = `Bearer ${token}`;
-        return config;
-      },
-      error => Promise.reject(error)
-    );
-
-    const responseInterceptor = instance.interceptors.response.use(
-      res => res,
-      error => {
-        const status = error.response?.status;
-        if (status === 401 || status === 403) {
-          console.log('Unauthorized - logging out');
-          signOutUser().then(() => navigate('/register'));
-        }
-        return Promise.reject(error);
+  // Request interceptor to add Firebase token
+  axiosSecure.interceptors.request.use(
+    async config => {
+      const token = localStorage.getItem('accessToken'); // Firebase token stored in localStorage
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
-    );
+      return config;
+    },
+    error => {
+      return Promise.reject(error);
+    }
+  );
 
-    return () => {
-      instance.interceptors.request.eject(requestInterceptor);
-      instance.interceptors.response.eject(responseInterceptor);
-    };
-  }, [user, signOutUser, navigate]);
+  // Response interceptor to handle errors globally
+  axiosSecure.interceptors.response.use(
+    response => response,
+    error => {
+      if (error.response && error.response.status === 401) {
+        console.warn('Unauthorized access, please login again.');
+      }
+      return Promise.reject(error);
+    }
+  );
 
-  return instance;
+  return axiosSecure;
 };
 
 export default useAxiosSecure;

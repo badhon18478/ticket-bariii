@@ -1,46 +1,45 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
-    // Check localStorage first
-    const savedTheme = localStorage.getItem('ticketbari-theme');
-    if (savedTheme) return savedTheme;
-
-    // Check system preference
-    if (
-      window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    ) {
-      return 'dark';
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      return savedTheme;
     }
-
-    // Default to light
-    return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
   });
 
-  // Toggle theme
   const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+    setTheme(prevTheme => {
+      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', newTheme);
+      return newTheme;
+    });
   };
 
-  // Update HTML class and localStorage
   useEffect(() => {
-    const root = window.document.documentElement;
-
-    // Remove both classes first
+    const root = document.documentElement;
     root.classList.remove('light', 'dark');
-
-    // Add current theme class
     root.classList.add(theme);
-
-    // Save to localStorage
-    localStorage.setItem('ticketbari-theme', theme);
-
-    // Add transition for smooth theme change
-    root.style.transition = 'background-color 0.3s ease, color 0.3s ease';
+    localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleChange = e => {
+      if (!localStorage.getItem('theme')) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

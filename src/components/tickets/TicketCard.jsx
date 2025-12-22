@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useTheme } from '../../hooks/useThemeContext';
+import { useTheme } from '../../hooks/useTheme';
 // import { useTheme } from '../../contexts/ThemeContext';
 
 const TicketCard = ({ ticket }) => {

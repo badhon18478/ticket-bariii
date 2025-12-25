@@ -5,6 +5,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 // import { AuthContext } from '../../../AuthContext';
 import { useAuth } from '../../../contexts/AuthProvider';
+import useAxiosSecure from '../../../hooks/useAxiosSecure';
 
 const AddTicket = () => {
   const { user } = useAuth();
@@ -23,7 +24,7 @@ const AddTicket = () => {
   });
   const [imageFile, setImageFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-
+  const axiosSecure = useAxiosSecure();
   const perkOptions = [
     'AC',
     'WiFi',
@@ -49,7 +50,7 @@ const AddTicket = () => {
     formData.append('image', file);
 
     try {
-      const response = await axios.post(
+      const response = await axiosSecure.post(
         `https://api.imgbb.com/1/upload?key=${
           import.meta.env.VITE_IMGBB_API_KEY
         }`,
@@ -72,7 +73,7 @@ const AddTicket = () => {
         imageUrl = await uploadToImgBB(imageFile);
       }
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/tickets`, {
+      await axiosSecure.post(`/api/tickets`, {
         ...formData,
         image: imageUrl,
         price: parseFloat(formData.price),

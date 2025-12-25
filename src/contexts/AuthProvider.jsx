@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.jsx
+// src/contexts/AuthProvider.jsx
 import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import {
   createUserWithEmailAndPassword,
@@ -25,55 +25,13 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // API Base URL
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_BASE_URL =
+    import.meta.env.VITE_API_URL || 'https://bari-server-plum.vercel.app';
 
-  // Get auth token
-  const getAuthToken = async () => {
-    if (user) {
-      try {
-        return await user.getIdToken();
-      } catch (error) {
-        console.error('Error getting auth token:', error);
-        return null;
-      }
-    }
-    return null;
-  };
-
-  // Save user to MongoDB
-  const saveUserToMongoDB = async userData => {
-    try {
-      const token = await getAuthToken();
-      if (!token) {
-        console.error('No auth token available');
-        return null;
-      }
-
-      const response = await axios.post(`${API_BASE_URL}/api/users`, userData, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      console.log('✅ User saved to MongoDB:', response.data);
-      return response.data;
-    } catch (error) {
-      // If user already exists, that's okay
-      if (error.response?.data?.message?.includes('already exists')) {
-        console.log('ℹ️ User already exists in MongoDB');
-        return { success: true, message: 'User already exists' };
-      }
-      console.error('❌ Error saving to MongoDB:', error);
-      return null;
-    }
-  };
-
-  // Fetch user role from backend
+  // Fetch user role
   const fetchUserRole = async email => {
     try {
       console.log('🔍 Fetching role for:', email);
@@ -81,84 +39,108 @@ export const AuthProvider = ({ children }) => {
         `${API_BASE_URL}/api/users/role/${email}`
       );
 
-      if (response.data.role) {
-        console.log('✅ User role fetched:', response.data.role);
+      console.log('✅ Role response:', response.data);
+
+      if (response.data.success && response.data.role) {
         setUserRole(response.data.role);
-        setUserData(response.data);
-        return response.data;
-      } else {
-        // Default to user
-        setUserRole('user');
-        return { role: 'user' };
-      }
-    } catch (error) {
-      console.error('❌ Error fetching user role:', error);
-
-      // Check default users
-      const defaultUsers = {
-        'admin@ticketbari.com': 'admin',
-        'vendor@ticketbari.com': 'vendor',
-        'user@ticketbari.com': 'user',
-      };
-
-      if (defaultUsers[email]) {
-        setUserRole(defaultUsers[email]);
-        return { role: defaultUsers[email] };
+        setUserData({
+          role: response.data.role,
+          isFraud: response.data.isFraud,
+        });
+        return response.data.role;
       }
 
-      // Default to user
       setUserRole('user');
-      return { role: 'user' };
+      return 'user';
+    } catch (err) {
+      console.error('❌ Error fetching role:', err);
+      setUserRole('user');
+      return 'user';
     }
   };
 
-  // Register user
-  const register = async (email, password, name, photoURL) => {
+  // Register user - FIXED
+  const register = async (email, password, name, photoURL, role = 'user') => {
+    console.log('🔵 [REGISTER] Role:', role, 'Email:', email);
     setLoading(true);
-    try {
-      console.log('📝 Starting registration for:', email);
 
-      // 1. Firebase Authentication
+    try {
+      // ✅ IMPORTANT: Prevent admin registration from frontend
+      if (role === 'admin') {
+        toast.error(
+          'Admin registration is not allowed. Please register as user or vendor.'
+        );
+        throw new Error('Admin registration disabled');
+      }
+
+      // 1. Create Firebase user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
         password
       );
 
-      console.log('✅ Firebase registration successful');
-
       // 2. Update Firebase profile
+      const finalPhotoURL =
+        photoURL ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          name
+        )}&background=random`;
+
       await updateProfile(userCredential.user, {
         displayName: name,
-        photoURL:
-          photoURL ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            name
-          )}&background=random`,
+        photoURL: finalPhotoURL,
       });
 
-      // 3. Save to MongoDB
-      const userData = {
-        email: email,
-        name: name,
-        photoURL:
-          photoURL ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            name
-          )}&background=random`,
-        role: 'user', // All new registrations are 'user' by default
+      // 3. Register in backend
+      const backendUser = {
+        email,
+        name,
+        photoURL: finalPhotoURL,
+        role: role, // This can only be 'user' or 'vendor'
       };
 
-      await saveUserToMongoDB(userData);
+      console.log('📤 Sending to backend:', backendUser);
 
-      // 4. Fetch role
-      await fetchUserRole(email);
+      const response = await axios.post(
+        `${API_BASE_URL}/api/users/register`,
+        backendUser
+      );
 
-      toast.success('Registration successful!');
-      return userCredential;
+      console.log('✅ Backend response:', response.data);
+
+      if (response.data.success) {
+        const registeredRole = response.data.user?.role || role;
+        setUserRole(registeredRole);
+        setUserData(response.data.user);
+
+        toast.success(`Registered successfully as ${registeredRole}!`);
+
+        // Refresh role
+        setTimeout(() => {
+          fetchUserRole(email);
+        }, 1000);
+
+        return {
+          userCredential,
+          role: registeredRole,
+          userData: response.data.user,
+        };
+      } else {
+        toast.error(response.data.message || 'Registration failed');
+        throw new Error(response.data.message || 'Registration failed');
+      }
     } catch (error) {
       console.error('❌ Registration error:', error);
-      toast.error(error.message);
+
+      if (error.code === 'auth/email-already-in-use') {
+        toast.error('Email already in use. Please login instead.');
+      } else if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error(error.message || 'Registration failed');
+      }
+
       throw error;
     } finally {
       setLoading(false);
@@ -169,26 +151,21 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setLoading(true);
     try {
-      console.log('🔑 Attempting login for:', email);
-
-      // 1. Firebase Authentication
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
         password
       );
 
-      console.log('✅ Firebase login successful');
-
-      // 2. Fetch role from backend
-      await fetchUserRole(email);
+      // Fetch role immediately
+      const role = await fetchUserRole(email);
 
       toast.success('Login successful!');
-      return userCredential;
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      toast.error(error.message);
-      throw error;
+      return { userCredential, role };
+    } catch (err) {
+      console.error('Login error:', err);
+      toast.error(err.message || 'Login failed');
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -202,10 +179,9 @@ export const AuthProvider = ({ children }) => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      console.log('✅ Google login successful:', user.email);
+      const token = await user.getIdToken();
 
-      // Save user to MongoDB
-      const userData = {
+      const backendUser = {
         email: user.email,
         name: user.displayName || user.email.split('@')[0],
         photoURL:
@@ -213,93 +189,52 @@ export const AuthProvider = ({ children }) => {
           `https://ui-avatars.com/api/?name=${encodeURIComponent(
             user.displayName || user.email
           )}&background=random`,
-        role: 'user',
       };
 
-      await saveUserToMongoDB(userData);
+      await axios.post(`${API_BASE_URL}/api/users/social-login`, backendUser, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-      // Fetch role
-      await fetchUserRole(user.email);
+      const role = await fetchUserRole(user.email);
 
       toast.success('Google login successful!');
-      return result;
-    } catch (error) {
-      console.error('❌ Google login error:', error);
-      toast.error(error.message);
-      throw error;
+      return { result, role };
+    } catch (err) {
+      console.error('Google login error:', err);
+      toast.error(err.message || 'Google login failed');
+      throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  // Logout user
   const logout = async () => {
-    setLoading(true);
     try {
       await signOut(auth);
+      setUser(null);
       setUserRole(null);
       setUserData(null);
       toast.success('Logged out successfully');
-    } catch (error) {
-      console.error('❌ Logout error:', error);
+    } catch (err) {
+      console.error('Logout error:', err);
       toast.error('Logout failed');
-      throw error;
-    } finally {
-      setLoading(false);
+      throw err;
     }
   };
 
-  // Update user profile
-  const updateUserProfile = async (name, photoURL) => {
-    if (!auth.currentUser) return;
-    setLoading(true);
-    try {
-      await updateProfile(auth.currentUser, { displayName: name, photoURL });
-      setUser({ ...auth.currentUser });
-
-      // Also update in MongoDB
-      const userData = {
-        email: auth.currentUser.email,
-        name: name,
-        photoURL: photoURL,
-        role: userRole || 'user',
-      };
-
-      await saveUserToMongoDB(userData);
-
-      toast.success('Profile updated successfully');
-    } catch (error) {
-      console.error('❌ Profile update error:', error);
-      toast.error('Failed to update profile');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Reset password
-  const resetPassword = async email => {
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      toast.success('Password reset email sent');
-    } catch (error) {
-      console.error('❌ Password reset error:', error);
-      toast.error('Failed to send reset email');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Firebase auth observer
+  // Auth state observer
+  // AuthProvider.jsx-এ useEffect-এ
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async currentUser => {
-      console.log('🔄 Auth state changed:', currentUser?.email);
+      console.log('🔵 [AuthProvider] Auth state changed:', {
+        email: currentUser?.email,
+        uid: currentUser?.uid,
+        timestamp: new Date().toISOString(),
+      });
+
       setUser(currentUser);
 
       if (currentUser?.email) {
-        // Fetch role
         await fetchUserRole(currentUser.email);
       } else {
         setUserRole(null);
@@ -322,14 +257,12 @@ export const AuthProvider = ({ children }) => {
       login,
       googleLogin,
       logout,
-      updateUserProfile,
-      resetPassword,
       fetchUserRole,
-      getAuthToken,
-      API_BASE_URL,
     }),
     [user, userRole, userData, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+export { AuthContext };

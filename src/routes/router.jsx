@@ -1,4 +1,3 @@
-// src/routes/router.js
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import Home from '../pages/Home';
@@ -32,6 +31,10 @@ import AdvertiseTickets from '../pages/dashboard/admin/AdvertiseTickets';
 import PrivateRoute from '../contexts/PrivateRoute';
 import RoleBasedRoute from '../contexts/RoleBasedRoute';
 import NotFound from '../pages/Error';
+import DashboardRedirect from '../layouts/Dashboard/DashboardRedirect';
+
+// Add this redirect component
+// import DashboardRedirect from '../components/DashboardRedirect';
 
 export const router = createBrowserRouter([
   // ================= MAIN =================
@@ -58,6 +61,7 @@ export const router = createBrowserRouter([
       },
       { path: 'login', element: <Login /> },
       { path: 'register', element: <Register /> },
+      { path: 'dashboard-redirect', element: <DashboardRedirect /> },
       { path: '*', element: <NotFound /> },
     ],
   },

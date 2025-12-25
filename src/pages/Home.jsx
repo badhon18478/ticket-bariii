@@ -31,6 +31,7 @@ import useAxiosSecure from '../hooks/useAxiosSecure';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TicketCard from '../components/tickets/TicketCard';
 import { useTheme } from '../hooks/useTheme';
+// import Banner from '../components/Banner';
 
 const Home = () => {
   const [advertisedTickets, setAdvertisedTickets] = useState([]);
@@ -201,6 +202,7 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 transition-colors duration-500">
       {/* HERO SECTION */}
+      {/* <Banner></Banner> */}
       <section
         className={`relative pt-28 md:pt-32 pb-20 px-4 overflow-hidden ${
           theme === 'dark'

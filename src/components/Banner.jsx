@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Ban } from 'lucide-react';
+import { Search, Package } from 'lucide-react';
 
 const Banner = () => {
   const navigate = useNavigate();
@@ -8,7 +8,7 @@ const Banner = () => {
   const [to, setTo] = useState('');
 
   const handleSearch = () => {
-    navigate(`/tickets?from=${from}&to=${to}`);
+    navigate(`/parcels?from=${from}&to=${to}`);
   };
 
   return (
@@ -25,15 +25,15 @@ const Banner = () => {
           <div className="inline-flex items-center gap-2 bg-primary-foreground/10 backdrop-blur-sm border border-primary-foreground/20 rounded-full px-4 py-2 mb-6 animate-fade-in">
             <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
             <span className="text-sm text-primary-foreground/80">
-              Trusted by 100,000+ travelers
+              Fast, reliable delivery across 64 districts
             </span>
           </div>
 
           {/* Heading */}
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-primary-foreground mb-6 animate-slide-up">
-            Book Your Next
-            <span className="block text-gradient bg-gradient-to-r from-amber-400 to-orange-500">
-              Adventure Today
+            We Make Sure Your
+            <span className="block text-gradient bg-gradient-to-r from-emerald-400 to-lime-400">
+              Parcel Arrives On Time
             </span>
           </h1>
 
@@ -41,8 +41,8 @@ const Banner = () => {
             className="text-lg md:text-xl text-primary-foreground/70 mb-10 max-w-2xl mx-auto animate-slide-up"
             style={{ animationDelay: '0.1s' }}
           >
-            Discover and book bus, train, launch & flight tickets easily.
-            Seamless travel experience at your fingertips.
+            Book deliveries in minutes, track every step in real time, and give
+            your customers a seamless parcel experience with ZapShift.
           </p>
 
           {/* Search Box */}
@@ -50,22 +50,22 @@ const Banner = () => {
             className="bg-card/95 backdrop-blur-sm rounded-2xl p-6 shadow-elevated max-w-3xl mx-auto animate-slide-up"
             style={{ animationDelay: '0.2s' }}
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-[1.2fr,1.2fr,auto] gap-4">
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="From (Location)"
+                  placeholder="Pickup location"
                   value={from}
                   onChange={e => setFrom(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="To (Location)"
+                  placeholder="Delivery location"
                   value={to}
                   onChange={e => setTo(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
@@ -73,10 +73,10 @@ const Banner = () => {
               </div>
               <button
                 onClick={handleSearch}
-                className="accent-gradient hover:opacity-90 transition-opacity h-12 text-accent-foreground font-semibold rounded-lg flex items-center justify-center gap-2"
+                className="accent-gradient hover:opacity-90 transition-opacity h-12 px-6 text-accent-foreground font-semibold rounded-lg flex items-center justify-center gap-2"
               >
                 <Search className="h-5 w-5" />
-                Search Tickets
+                Track / Book
               </button>
             </div>
           </div>
@@ -87,10 +87,10 @@ const Banner = () => {
             style={{ animationDelay: '0.3s' }}
           >
             {[
-              { value: '50K+', label: 'Happy Customers' },
-              { value: '1000+', label: 'Routes Available' },
-              { value: '24/7', label: 'Customer Support' },
-              { value: '99%', label: 'On-time Departure' },
+              { value: '10K+', label: 'Parcels Delivered' },
+              { value: '64', label: 'Districts Covered' },
+              { value: '24/7', label: 'Support Center' },
+              { value: '80%', label: 'Rider Commission (inside city)' },
             ].map(stat => (
               <div key={stat.label} className="text-center">
                 <p className="text-2xl md:text-3xl font-bold text-primary-foreground">

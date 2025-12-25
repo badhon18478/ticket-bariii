@@ -3,11 +3,9 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './routes/router.jsx';
-// import AuthProvider from './contexts/AuthProvider.jsx';
 import { ThemeProvider } from './hooks/useTheme.jsx';
 import { TicketProvider } from './contexts/TicketContext.jsx';
 import { AuthProvider } from './contexts/AuthProvider.jsx';
-// import { ThemeProvider } from './hooks/useTheme.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

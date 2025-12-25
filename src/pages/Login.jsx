@@ -27,11 +27,11 @@ const Login = () => {
     if (!userRole) return;
 
     if (userRole === 'admin') {
-      navigate('/admin/profile', { replace: true });
+      navigate('/admin-dashboard/profile', { replace: true });
     } else if (userRole === 'vendor') {
-      navigate('/vendor/profile', { replace: true });
+      navigate('/vendor-dashboard/profile', { replace: true });
     } else {
-      navigate('/user/profile', { replace: true });
+      navigate('/user-dashboard/profile', { replace: true });
     }
   }, [userRole, navigate]);
 

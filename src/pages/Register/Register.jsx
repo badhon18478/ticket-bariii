@@ -43,6 +43,7 @@ const Register = () => {
     return errors;
   };
 
+  // src/pages/Register.jsx
   const handleRegister = async e => {
     e.preventDefault();
     setErrors({});
@@ -56,41 +57,34 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const userCredential = await register(formData.email, formData.password);
+      // Call register with role
+      const result = await register(
+        formData.email,
+        formData.password,
+        formData.name,
+        formData.photoURL,
+        formData.role
+      );
 
-      await updateUserProfile(formData.name, formData.photoURL);
+      console.log('Registration result:', result);
 
-      const token = await userCredential.user.getIdToken();
-
-      const response = await fetch('http://localhost:5000/api/users/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          name: formData.name,
-          photoURL: formData.photoURL,
-          role: formData.role,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        toast.success('Registration successful! 🎉');
-        navigate('/');
-      } else {
-        toast.error(data.message || 'Registration failed');
-      }
+      // Navigate based on role
+      setTimeout(() => {
+        if (formData.role === 'vendor') {
+          navigate('/vendor-dashboard');
+        } else if (formData.role === 'admin') {
+          navigate('/admin-dashboard');
+        } else {
+          navigate('/dashboard');
+        }
+      }, 500);
     } catch (error) {
       console.error('Registration error:', error);
-      toast.error(error.message || 'Registration failed');
+      // Error is already shown in register function
     } finally {
       setLoading(false);
     }
   };
-
   const handleGoogleLogin = async () => {
     setLoading(true);
 
@@ -99,7 +93,7 @@ const Register = () => {
       const token = await result.user.getIdToken();
 
       const response = await fetch(
-        'http://localhost:5000/api/users/social-login',
+        `${import.meta.env.VITE_API_URL}/api/users/social-login`,
         {
           method: 'POST',
           headers: {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { getTicketById } from '../../services/tickets';
 import { createBooking } from '../../services/bookings';
+import PaymentModal from '../../components/tickets/PaymentModal'; // Import PaymentModal
 import BookingModal from './BookingModal';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { toast } from 'react-hot-toast';
@@ -14,10 +15,11 @@ const TicketDetails = () => {
   const { id } = useParams();
   const { theme } = useTheme();
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false); // New state
   const [timeLeft, setTimeLeft] = useState(null);
+  const [bookingData, setBookingData] = useState(null); // Store booking data
 
   // Fetch ticket details
   const {
@@ -65,7 +67,7 @@ const TicketDetails = () => {
     };
 
     calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 60000); // Update every minute
+    const timer = setInterval(calculateTimeLeft, 60000);
 
     return () => clearInterval(timer);
   }, [ticket]);
@@ -73,7 +75,6 @@ const TicketDetails = () => {
   const handleBookNow = () => {
     if (!currentUser) {
       toast.error('Please login to book tickets');
-      navigate('/login');
       return;
     }
 
@@ -82,18 +83,40 @@ const TicketDetails = () => {
 
   const handleBookingSubmit = async bookingData => {
     try {
-      await createBooking({
+      // First create booking
+      const response = await createBooking({
         ticketId: ticket._id,
         bookingQuantity: bookingData.quantity,
         totalPrice: ticket.price * bookingData.quantity,
+        passengerName: bookingData.passengerName,
+        passengerPhone: bookingData.passengerPhone,
       });
 
-      toast.success('Booking successful!');
-      setIsModalOpen(false);
+      if (response.success) {
+        // Store booking data for payment
+        setBookingData({
+          bookingId: response.bookingId,
+          ticketId: ticket._id,
+          amount: ticket.price * bookingData.quantity,
+          quantity: bookingData.quantity,
+        });
+
+        // Close booking modal and open payment modal
+        setIsModalOpen(false);
+        setIsPaymentModalOpen(true);
+
+        toast.success('Booking created! Please complete payment.');
+      }
     } catch (error) {
-      toast.error('Failed to book ticket');
+      toast.error('Failed to create booking');
       console.error(error);
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    toast.success('Payment completed successfully!');
+    setIsPaymentModalOpen(false);
+    // Stay on the same page
   };
 
   const getTransportIcon = type => {
@@ -162,12 +185,6 @@ const TicketDetails = () => {
         <p className="mb-6">
           The ticket you're looking for doesn't exist or has been removed.
         </p>
-        <button
-          onClick={() => navigate('/all-tickets')}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition"
-        >
-          Back to Tickets
-        </button>
       </div>
     );
   }
@@ -312,6 +329,18 @@ const TicketDetails = () => {
           ticket={ticket}
           onClose={() => setIsModalOpen(false)}
           onSubmit={handleBookingSubmit}
+        />
+      )}
+
+      {isPaymentModalOpen && bookingData && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => setIsPaymentModalOpen(false)}
+          amount={bookingData.amount}
+          bookingId={bookingData.bookingId}
+          ticketId={bookingData.ticketId}
+          quantity={bookingData.quantity}
+          onSuccess={handlePaymentSuccess}
         />
       )}
     </div>

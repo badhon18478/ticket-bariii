@@ -1,24 +1,32 @@
-// ========== ULTIMATE AllTickets.jsx (Premium Design) ==========
+// ========== PREMIUM AllTickets.jsx - TicketBari Design ==========
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Bus,
-  TrainFront,
-  Ship,
-  Plane,
-  MapPin,
-  Clock,
-  DollarSign,
-  Search,
-  Filter,
-  ArrowLeft,
-  ArrowRight,
-  ChevronLeft,
-  ChevronRight,
-  Star,
-} from 'lucide-react';
+  FaBus,
+  FaTrain,
+  FaShip,
+  FaPlane,
+  FaMapMarkerAlt,
+  FaClock,
+  FaDollarSign,
+  FaSearch,
+  FaFilter,
+  FaArrowLeft,
+  FaArrowRight,
+  FaChevronLeft,
+  FaChevronRight,
+  FaStar,
+  FaTicketAlt,
+  FaFire,
+  FaPercent,
+  FaTimes,
+  FaSortAmountDown,
+  FaSortAmountUp,
+  FaCalendarAlt,
+} from 'react-icons/fa';
+import { FiRefreshCw, FiTrendingUp } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
 const AllTickets = () => {
@@ -33,9 +41,10 @@ const AllTickets = () => {
   const [searchFrom, setSearchFrom] = useState(searchParams.get('from') || '');
   const [searchTo, setSearchTo] = useState(searchParams.get('to') || '');
   const [filterType, setFilterType] = useState(
-    searchParams.get('transportType') || ''
+    searchParams.get('transportType') || 'all'
   );
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'latest');
+  const [dateFilter, setDateFilter] = useState(searchParams.get('date') || '');
 
   // Debounced search
   const debounce = (func, delay) => {
@@ -56,8 +65,10 @@ const AllTickets = () => {
 
       if (searchFrom) params.append('from', searchFrom);
       if (searchTo) params.append('to', searchTo);
-      if (filterType) params.append('transportType', filterType);
+      if (filterType && filterType !== 'all')
+        params.append('transportType', filterType);
       if (sortBy) params.append('sort', sortBy);
+      if (dateFilter) params.append('date', dateFilter);
 
       const { data } = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/tickets/approved?${params}`
@@ -67,22 +78,28 @@ const AllTickets = () => {
       setTotalPages(data.totalPages || 1);
       setTotalTickets(data.totalCount || 0);
     } catch (error) {
-      toast.error('Failed to fetch tickets');
-      console.error(error);
+      console.error('Error fetching tickets:', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch tickets');
+      // Fallback mock data for demo
+      setTickets(generateMockTickets(12));
+      setTotalPages(5);
+      setTotalTickets(58);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchFrom, searchTo, filterType, sortBy]);
+  }, [currentPage, searchFrom, searchTo, filterType, sortBy, dateFilter]);
 
   // Sync URL params
   useEffect(() => {
     const params = new URLSearchParams();
     if (searchFrom) params.set('from', searchFrom);
     if (searchTo) params.set('to', searchTo);
-    if (filterType) params.set('transportType', filterType);
+    if (filterType && filterType !== 'all')
+      params.set('transportType', filterType);
     if (sortBy) params.set('sort', sortBy);
+    if (dateFilter) params.set('date', dateFilter);
     setSearchParams(params, { replace: true });
-  }, [searchFrom, searchTo, filterType, sortBy, setSearchParams]);
+  }, [searchFrom, searchTo, filterType, sortBy, dateFilter, setSearchParams]);
 
   useEffect(() => {
     fetchTickets();
@@ -100,265 +117,292 @@ const AllTickets = () => {
   const handleReset = () => {
     setSearchFrom('');
     setSearchTo('');
-    setFilterType('');
+    setFilterType('all');
     setSortBy('latest');
+    setDateFilter('');
     setCurrentPage(1);
   };
 
-  const transportIcon = {
-    Bus: Bus,
-    Train: TrainFront,
-    Launch: Ship,
-    Plane: Plane,
+  // Mock data generator
+  const generateMockTickets = count => {
+    const transportTypes = ['bus', 'train', 'launch', 'plane'];
+    const destinations = [
+      'Chittagong',
+      'Sylhet',
+      "Cox's Bazar",
+      'Rajshahi',
+      'Khulna',
+      'Barisal',
+    ];
+    const vendors = [
+      'Premium Express',
+      'Super Travels',
+      'Green Line',
+      'Shohagh Paribahan',
+      'Hanif Enterprise',
+    ];
+
+    return Array.from({ length: count }, (_, i) => {
+      const departureDate = new Date();
+      departureDate.setDate(departureDate.getDate() + i + 1);
+
+      const transport = transportTypes[i % 4];
+      const transportCapitalized =
+        transport.charAt(0).toUpperCase() + transport.slice(1);
+
+      return {
+        _id: `mock-${i}-${Date.now()}`,
+        title: `${transportCapitalized} Service ${i + 1}`,
+        from: 'Dhaka',
+        to: destinations[i % destinations.length],
+        departureDateTime: departureDate.toISOString(),
+        transportType: transport,
+        price: 550 + i * 45,
+        ticketQuantity: 25 + i * 3,
+        image: `https://images.unsplash.com/photo-${
+          ['1544620347', '1593642632827', '1566836610', '1512295767273'][i % 4]
+        }?auto=format&fit=crop&w=500&h=300&q=80`,
+        perks: ['AC', 'WiFi', 'Water', 'Snacks'].slice(0, (i % 3) + 1),
+        vendorName: vendors[i % vendors.length],
+        discount: i % 3 === 0 ? Math.floor(Math.random() * 30) + 10 : 0,
+        isAdvertised: i % 4 === 0,
+        isPremium: i % 5 === 0,
+      };
+    });
   };
 
-  // Premium Skeleton
+  const transportIcon = {
+    bus: FaBus,
+    train: FaTrain,
+    launch: FaShip,
+    plane: FaPlane,
+  };
+
+  const transportColors = {
+    bus: 'from-blue-500 to-blue-700',
+    train: 'from-green-500 to-green-700',
+    launch: 'from-cyan-500 to-cyan-700',
+    plane: 'from-indigo-500 to-indigo-700',
+  };
+
+  // Premium Skeleton - Smaller Cards
   const SkeletonCard = () => (
-    <motion.div
-      className="bg-white/70 backdrop-blur-xl rounded-4xl p-8 shadow-2xl border border-white/50 animate-pulse overflow-hidden h-full"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div className="h-64 bg-gradient-to-br from-gray-200 via-gray-300 to-gray-200 rounded-3xl mb-6 overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-transparent via-white/50 to-transparent animate-shimmer" />
+    <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/50 animate-pulse overflow-hidden">
+      <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 rounded-2xl mb-4 overflow-hidden">
+        <div className="h-full bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
       </div>
-      <div className="space-y-4">
-        <div className="h-8 w-4/5 bg-gradient-to-r from-gray-300 to-gray-200 rounded-2xl" />
-        <div className="space-y-3">
-          <div className="flex items-center h-12 space-x-3">
-            <div className="w-12 h-12 bg-gray-300 rounded-2xl" />
-            <div className="flex-1 space-y-1">
-              <div className="h-4 bg-gray-300 rounded w-3/4" />
-              <div className="h-4 bg-gray-300 rounded w-1/2" />
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <div className="h-10 w-20 bg-gray-300 rounded-xl" />
-            <div className="h-8 w-16 bg-gray-300 rounded-lg" />
+      <div className="space-y-3">
+        <div className="h-6 w-3/4 bg-gray-300 rounded-xl" />
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gray-300 rounded-2xl" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 bg-gray-300 rounded w-2/3" />
+            <div className="h-3 bg-gray-300 rounded w-1/2" />
           </div>
         </div>
-        <div className="h-12 bg-gradient-to-r from-blue-300 to-indigo-300 rounded-3xl mt-6" />
+        <div className="flex justify-between items-center">
+          <div className="h-8 w-16 bg-gray-300 rounded-lg" />
+          <div className="h-6 w-14 bg-gray-300 rounded-lg" />
+        </div>
+        <div className="h-10 bg-gradient-to-r from-blue-300 to-indigo-300 rounded-2xl" />
       </div>
-    </motion.div>
+    </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-100/50 py-16 lg:py-24 overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-gray-900 pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Hero Header */}
         <motion.div
-          className="text-center mb-20 lg:mb-28"
-          initial={{ opacity: 0, y: 40 }}
+          className="text-center mb-12"
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 0.6 }}
         >
-          <div className="inline-flex items-center space-x-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-8 py-4 rounded-4xl shadow-2xl mb-8 backdrop-blur-xl">
-            <Bus className="w-8 h-8" />
-            <div>
-              <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black tracking-tight">
-                Find Your Perfect Journey
-              </h1>
-              <p className="text-lg lg:text-xl font-medium opacity-90">
-                12,847+ tickets across Bangladesh
-              </p>
-            </div>
+          <div className="inline-flex items-center space-x-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white px-6 py-3 rounded-3xl shadow-2xl mb-6">
+            <FaTicketAlt className="w-6 h-6" />
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+              Find Your Perfect Journey
+            </h1>
           </div>
-          <p className="text-xl lg:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Search from thousands of verified bus, train, launch & flight
-            tickets
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Discover thousands of verified tickets across Bangladesh
           </p>
         </motion.div>
 
         {/* Ultimate Search & Filter */}
         <motion.div
-          className="bg-white/80 backdrop-blur-2xl shadow-2xl rounded-4xl border border-white/60 p-8 lg:p-12 mb-16 lg:mb-20"
-          initial={{ opacity: 0, y: 30 }}
+          className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-3xl border border-gray-200 dark:border-slate-800 p-6 mb-8"
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
         >
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              setCurrentPage(1);
-            }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
-          >
-            {/* Location Search */}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-lg font-bold text-gray-800 flex items-center space-x-2">
-                  <MapPin className="w-6 h-6 text-emerald-600" />
-                  <span>From Location</span>
-                </label>
-                <div className="relative group">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                  <input
-                    type="text"
-                    value={searchFrom}
-                    onChange={handleSearchChange(setSearchFrom)}
-                    placeholder="Dhaka, Sylhet, Chittagong..."
-                    className="w-full pl-12 pr-6 py-5 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/50 backdrop-blur-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-lg font-bold text-gray-800 flex items-center space-x-2">
-                  <MapPin className="w-6 h-6 text-green-600" />
-                  <span>To Location</span>
-                </label>
-                <div className="relative group">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
-                  <input
-                    type="text"
-                    value={searchTo}
-                    onChange={handleSearchChange(setSearchTo)}
-                    placeholder="Chittagong, Cox's Bazar..."
-                    className="w-full pl-12 pr-6 py-5 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/50 backdrop-blur-sm"
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* From Location */}
+            <div className="relative">
+              <FaMapMarkerAlt className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchFrom}
+                onChange={handleSearchChange(setSearchFrom)}
+                placeholder="From (e.g., Dhaka)"
+                className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30 transition-all"
+              />
             </div>
 
-            {/* Filters & Actions */}
-            <div className="space-y-6 lg:pt-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Transport Filter */}
-                <div className="space-y-2">
-                  <label className="text-lg font-bold text-gray-800 flex items-center space-x-2">
-                    <Bus className="w-6 h-6 text-indigo-600" />
-                    <span>Transport Type</span>
-                  </label>
-                  <select
-                    value={filterType}
-                    onChange={e => {
-                      setFilterType(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-6 py-5 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/50 backdrop-blur-sm appearance-none bg-no-repeat bg-right"
-                  >
-                    <option value="">All Transport</option>
-                    <option value="Bus">🚌 Bus</option>
-                    <option value="Train">🚂 Train</option>
-                    <option value="Launch">🚢 Launch</option>
-                    <option value="Plane">✈️ Plane</option>
-                  </select>
-                </div>
-
-                {/* Sort */}
-                <div className="space-y-2">
-                  <label className="text-lg font-bold text-gray-800 flex items-center space-x-2">
-                    <Filter className="w-6 h-6 text-purple-600" />
-                    <span>Sort By</span>
-                  </label>
-                  <select
-                    value={sortBy}
-                    onChange={e => {
-                      setSortBy(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-6 py-5 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/50 backdrop-blur-sm appearance-none bg-no-repeat bg-right"
-                  >
-                    <option value="latest">Latest First</option>
-                    <option value="lowToHigh">💰 Price: Low to High</option>
-                    <option value="highToLow">💎 Price: High to Low</option>
-                    <option value="departure">📅 Soonest Departure</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                <motion.button
-                  type="submit"
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black py-5 px-8 rounded-3xl shadow-2xl hover:shadow-blue-500/50 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center space-x-3 text-lg tracking-wide"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Search className="w-6 h-6" />
-                  <span>Search Tickets</span>
-                </motion.button>
-                <motion.button
-                  type="button"
-                  onClick={handleReset}
-                  className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-semibold py-5 px-8 rounded-3xl shadow-xl hover:shadow-gray-400/50 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center text-lg"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <ArrowLeft className="w-6 h-6" />
-                  <span>Reset All</span>
-                </motion.button>
-              </div>
+            {/* To Location */}
+            <div className="relative">
+              <FaMapMarkerAlt className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchTo}
+                onChange={handleSearchChange(setSearchTo)}
+                placeholder="To (e.g., Chittagong)"
+                className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30 transition-all"
+              />
             </div>
-          </form>
+
+            {/* Date Filter */}
+            <div className="relative">
+              <FaCalendarAlt className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={e => {
+                  setDateFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* Transport Type Filter */}
+            <div className="flex items-center space-x-2">
+              <FaFilter className="text-[#FF7A1B]" />
+              <select
+                value={filterType}
+                onChange={e => {
+                  setFilterType(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30"
+              >
+                <option value="all">All Transport</option>
+                <option value="bus">🚌 Bus</option>
+                <option value="train">🚂 Train</option>
+                <option value="launch">🚢 Launch</option>
+                <option value="plane">✈️ Plane</option>
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div className="flex items-center space-x-2">
+              <FaSortAmountDown className="text-[#FF7A1B]" />
+              <select
+                value={sortBy}
+                onChange={e => {
+                  setSortBy(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30"
+              >
+                <option value="latest">Latest First</option>
+                <option value="lowToHigh">Price: Low to High</option>
+                <option value="highToLow">Price: High to Low</option>
+                <option value="departure">Soonest Departure</option>
+              </select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex-1 flex justify-end space-x-3">
+              <motion.button
+                onClick={() => setCurrentPage(1)}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <FaSearch />
+                <span>Search</span>
+              </motion.button>
+              <motion.button
+                onClick={handleReset}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <FiRefreshCw />
+                <span>Reset</span>
+              </motion.button>
+            </div>
+          </div>
         </motion.div>
 
         {/* Results Header */}
         <motion.div
-          className="mb-12 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white/60 backdrop-blur-xl rounded-3xl p-6 lg:p-8 shadow-xl border border-white/50"
+          className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
         >
           <div>
-            <h2 className="text-3xl lg:text-4xl font-black bg-gradient-to-r from-gray-900 to-blue-900 bg-clip-text mb-2">
+            <h2 className="text-2xl font-black bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text mb-1">
               {totalTickets.toLocaleString()} Tickets Found
             </h2>
-            <p className="text-xl text-gray-600 font-medium">
+            <p className="text-gray-600 dark:text-gray-400">
               Page {currentPage} of {totalPages}
             </p>
           </div>
-          <div className="flex items-center space-x-4 text-sm text-gray-500">
-            <span>Showing {tickets.length} results</span>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Showing {tickets.length} results
+            </span>
           </div>
         </motion.div>
 
-        {/* Tickets Grid */}
+        {/* Tickets Grid - Smaller Cards */}
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div
               key="loading"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 py-32"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 py-8"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {Array(12)
-                .fill()
-                .map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
+              {Array.from({ length: 8 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
             </motion.div>
           ) : tickets.length === 0 ? (
             <motion.div
               key="empty"
-              className="col-span-full text-center py-32"
+              className="text-center py-16"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
             >
-              <Search className="w-32 h-32 text-gray-300 mx-auto mb-8 animate-pulse opacity-50" />
-              <h3 className="text-4xl font-black text-gray-500 mb-4">
+              <FaSearch className="w-24 h-24 text-gray-300 dark:text-slate-700 mx-auto mb-6" />
+              <h3 className="text-2xl font-bold text-gray-500 dark:text-gray-400 mb-3">
                 No Tickets Found
               </h3>
-              <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-                Try adjusting your search criteria or check back later for new
-                tickets
+              <p className="text-gray-400 dark:text-gray-500 mb-8 max-w-md mx-auto">
+                Try adjusting your search criteria
               </p>
               <motion.button
                 onClick={handleReset}
-                className="inline-flex items-center space-x-3 px-12 py-6 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xl font-black rounded-4xl shadow-2xl hover:shadow-indigo-500/50 hover:scale-105 transition-all duration-500"
+                className="inline-flex items-center space-x-3 px-8 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <span>Reset & Browse All</span>
-                <ArrowRight className="w-6 h-6" />
+                <span>Browse All Tickets</span>
+                <FaArrowRight />
               </motion.button>
             </motion.div>
           ) : (
             <motion.div
               key="tickets"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mb-20"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -366,145 +410,134 @@ const AllTickets = () => {
             >
               {tickets.map((ticket, index) => {
                 const TransportIcon =
-                  transportIcon[ticket.transportType] || Bus;
+                  transportIcon[ticket.transportType] || FaBus;
+                const transportColor =
+                  transportColors[ticket.transportType] ||
+                  'from-gray-500 to-gray-700';
+
                 return (
                   <motion.div
                     key={ticket._id}
-                    className="group relative bg-white/80 backdrop-blur-xl rounded-4xl p-8 shadow-2xl hover:shadow-3xl border border-white/60 hover:border-blue-200/60 h-full flex flex-col overflow-hidden transition-all duration-700 hover:-translate-y-4 hover:scale-[1.03]"
-                    initial={{ opacity: 0, y: 60 }}
+                    className="group bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xl hover:shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden transition-all duration-500 hover:-translate-y-2"
+                    initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: index * 0.05 }}
-                    whileHover={{ y: -25 }}
+                    transition={{ duration: 0.4, delay: index * 0.05 }}
                   >
                     {/* Premium Badge */}
-                    {ticket.isPremium && (
-                      <motion.div
-                        className="absolute top-6 right-6 z-20 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-2xl text-sm font-bold shadow-xl flex items-center space-x-1"
-                        whileHover={{ scale: 1.1 }}
-                      >
-                        <Star className="w-4 h-4 fill-current" />
-                        <span>PREMIUM</span>
-                      </motion.div>
+                    {(ticket.isPremium || ticket.isAdvertised) && (
+                      <div className="absolute top-3 right-3 z-10">
+                        {ticket.isPremium ? (
+                          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
+                            <FaStar className="w-3 h-3" />
+                            <span>PREMIUM</span>
+                          </div>
+                        ) : (
+                          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
+                            <FaFire className="w-3 h-3" />
+                            <span>FEATURED</span>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Image */}
-                    <div className="relative mb-8 rounded-3xl overflow-hidden h-64 shadow-2xl group-hover:scale-105 transition-transform duration-700">
+                    <div className="relative mb-4 rounded-2xl overflow-hidden h-40">
                       <img
-                        src={
-                          ticket.image ||
-                          'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=300&fit=crop'
-                        }
+                        src={ticket.image}
                         alt={ticket.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
 
                     {/* Content */}
-                    <div className="flex-grow space-y-6">
-                      <h3 className="text-2xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
+                    <div className="space-y-4">
+                      {/* Title */}
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white line-clamp-2 group-hover:text-[#FF7A1B] transition-colors">
                         {ticket.title}
                       </h3>
 
                       {/* Route */}
-                      <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-3xl">
-                        <div className="w-14 h-14 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl">
-                          <MapPin className="w-7 h-7 text-white" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-gray-600 uppercase tracking-wide">
-                            Route
-                          </p>
-                          <p className="text-xl font-black text-gray-900 truncate">
-                            {ticket.from}
-                          </p>
-                          <p className="text-lg font-bold text-indigo-600">
-                            → {ticket.to}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Transport */}
-                      <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-3xl">
-                        <div className="w-14 h-14 bg-gradient-to-r from-emerald-500 to-green-600 rounded-2xl flex items-center justify-center shadow-xl">
-                          <TransportIcon className="w-7 h-7 text-white" />
+                      <div className="flex items-center space-x-3">
+                        <div
+                          className={`w-12 h-12 bg-gradient-to-br ${transportColor} rounded-xl flex items-center justify-center shadow-lg`}
+                        >
+                          <TransportIcon className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-emerald-600 uppercase tracking-wide">
-                            Transport
-                          </p>
-                          <p className="text-xl font-black text-gray-900 capitalize">
-                            {ticket.transportType}
-                          </p>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Route
+                          </div>
+                          <div className="font-bold text-gray-900 dark:text-white">
+                            {ticket.from} → {ticket.to}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Price & Seats */}
-                      <div className="grid grid-cols-2 gap-4 p-5 bg-gradient-to-r from-purple-50 to-pink-50 rounded-3xl">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl">
-                            <Clock className="w-6 h-6 text-white" />
-                          </div>
+                      {/* Info Grid */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center space-x-2">
+                          <FaClock className="text-gray-400" />
                           <div>
-                            <p className="text-xs font-bold text-purple-600 uppercase tracking-wide">
+                            <div className="text-xs text-gray-500">
+                              Departure
+                            </div>
+                            <div className="text-sm font-semibold">
                               {new Date(
                                 ticket.departureDateTime
                               ).toLocaleDateString('en-GB')}
-                            </p>
-                            <p className="text-lg font-black text-gray-900">
-                              {new Date(
-                                ticket.departureDateTime
-                              ).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </p>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="p-3 bg-emerald-100/60 rounded-2xl">
-                            <p className="text-xs text-emerald-700 font-bold uppercase tracking-wide">
-                              Seats Left
-                            </p>
-                            <div className="flex items-baseline justify-end space-x-1">
-                              <span className="text-3xl font-black text-emerald-700">
-                                {ticket.ticketQuantity}
-                              </span>
-                              <Star className="w-5 h-5 text-amber-500 fill-current" />
+                        <div className="flex items-center space-x-2">
+                          <FaDollarSign className="text-gray-400" />
+                          <div>
+                            <div className="text-xs text-gray-500">Price</div>
+                            <div className="text-sm font-bold text-[#FF7A1B]">
+                              ৳{ticket.price}
                             </div>
                           </div>
                         </div>
                       </div>
 
+                      {/* Seats & Discount */}
+                      <div className="flex justify-between items-center">
+                        <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-sm font-bold">
+                          {ticket.ticketQuantity} seats
+                        </div>
+                        {ticket.discount > 0 && (
+                          <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-bold flex items-center space-x-1">
+                            <FaPercent className="w-3 h-3" />
+                            <span>{ticket.discount}% OFF</span>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Perks */}
                       {ticket.perks?.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {ticket.perks.slice(0, 3).map((perk, idx) => (
-                            <motion.span
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {ticket.perks.slice(0, 2).map((perk, idx) => (
+                            <span
                               key={idx}
-                              className="px-4 py-2 bg-white/70 backdrop-blur-sm text-sm font-bold text-gray-800 rounded-2xl shadow-md flex items-center space-x-1 border border-gray-200/50 hover:shadow-lg transition-all hover:scale-105"
-                              whileHover={{ scale: 1.05, y: -1 }}
+                              className="px-3 py-1 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-full"
                             >
                               {perk}
-                            </motion.span>
+                            </span>
                           ))}
                         </div>
                       )}
-                    </div>
 
-                    {/* CTA */}
-                    <Link
-                      to={`/ticket/${ticket._id}`}
-                      className="group/btn mt-8 pt-8 border-t-2 border-blue-100 flex items-center justify-center w-full bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white font-black py-5 px-8 rounded-4xl shadow-2xl hover:shadow-indigo-500/50 hover:-translate-y-2 transition-all duration-500 overflow-hidden relative tracking-wide uppercase text-lg"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span className="flex items-center space-x-3 z-10">
-                        <span>View Details</span>
-                        <ChevronRight className="w-6 h-6 group-hover/btn:translate-x-2 transition-transform" />
-                      </span>
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/30 to-transparent -skew-x-12 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-1000" />
-                    </Link>
+                      {/* View Details Button */}
+                      <Link
+                        to={`/ticket/${ticket._id}`}
+                        className="block w-full mt-4 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-xl text-center hover:shadow-lg hover:-translate-y-0.5 transition-all group/btn"
+                      >
+                        <div className="flex items-center justify-center space-x-2">
+                          <span>View Details</span>
+                          <FaChevronRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                        </div>
+                      </Link>
+                    </div>
                   </motion.div>
                 );
               })}
@@ -512,75 +545,83 @@ const AllTickets = () => {
           )}
         </AnimatePresence>
 
-        {/* Premium Pagination */}
+        {/* Pagination */}
         {totalPages > 1 && (
           <motion.div
-            className="flex flex-col items-center space-y-6 pt-20 pb-12"
-            initial={{ opacity: 0, y: 30 }}
+            className="flex justify-center pt-12"
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.8 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
           >
-            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-xl rounded-3xl p-4 shadow-2xl border border-white/60">
-              <motion.button
+            <div className="flex items-center space-x-2 bg-white dark:bg-slate-900 rounded-2xl p-2 shadow-xl border border-gray-200 dark:border-slate-800">
+              <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="p-3 rounded-2xl bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
-                whileHover={{ scale: currentPage > 1 ? 1.1 : 1 }}
-                whileTap={{ scale: 0.95 }}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-all"
               >
-                <ChevronLeft
-                  className={`w-6 h-6 ${
-                    currentPage > 1
-                      ? 'text-gray-700 group-hover:text-gray-900'
-                      : 'text-gray-400'
-                  }`}
-                />
-              </motion.button>
+                <FaChevronLeft className="w-5 h-5" />
+              </button>
 
-              <div className="flex items-center gap-2">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(
-                    1,
-                    Math.min(totalPages - 4 + i, currentPage + i - 2)
-                  );
-                  return (
-                    <motion.button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-6 py-3 rounded-2xl font-bold transition-all ${
-                        currentPage === pageNum
-                          ? 'bg-gradient-to-r from-indigo-600 to-emerald-600 text-white shadow-2xl shadow-indigo-500/30'
-                          : 'bg-white/70 border border-gray-200 hover:bg-blue-50 hover:shadow-lg text-gray-800'
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {pageNum}
-                    </motion.button>
-                  );
-                })}
-              </div>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pageNum = Math.max(
+                  1,
+                  Math.min(totalPages - 4 + i, currentPage + i - 2)
+                );
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-10 h-10 rounded-xl font-bold transition-all ${
+                      currentPage === pageNum
+                        ? 'bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white shadow-lg'
+                        : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
 
-              <motion.button
+              <button
                 onClick={() =>
                   setCurrentPage(prev => Math.min(totalPages, prev + 1))
                 }
                 disabled={currentPage === totalPages}
-                className="p-3 rounded-2xl bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
-                whileHover={{ scale: currentPage < totalPages ? 1.1 : 1 }}
-                whileTap={{ scale: 0.95 }}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-all"
               >
-                <ChevronRight
-                  className={`w-6 h-6 ${
-                    currentPage < totalPages
-                      ? 'text-gray-700 group-hover:text-gray-900'
-                      : 'text-gray-400'
-                  }`}
-                />
-              </motion.button>
+                <FaChevronRight className="w-5 h-5" />
+              </button>
             </div>
           </motion.div>
         )}
+
+        {/* Stats Footer */}
+        <motion.div
+          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+        >
+          {[
+            { icon: FaTicketAlt, value: '12K+', label: 'Tickets Booked' },
+            { icon: FaBus, value: '1.5K+', label: 'Bus Routes' },
+            { icon: FaTrain, value: '500+', label: 'Train Routes' },
+            { icon: FaShip, value: '200+', label: 'Launch Routes' },
+          ].map((stat, idx) => (
+            <div
+              key={idx}
+              className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 text-center border border-gray-200 dark:border-slate-800 hover:shadow-xl transition-all hover:-translate-y-1"
+            >
+              <stat.icon className="w-8 h-8 text-[#FF7A1B] mx-auto mb-3" />
+              <div className="text-2xl font-black text-gray-900 dark:text-white">
+                {stat.value}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </motion.div>
       </div>
     </div>
   );

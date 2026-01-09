@@ -1,8 +1,13 @@
+// ========== 1. User Dashboard - MyBookedTickets.jsx ==========
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../../contexts/AuthProvider';
-import axios from 'axios';
-import toast from 'react-hot-toast';
-import { FiClock, FiMapPin, FiCalendar } from 'react-icons/fi';
+// import { useAuth } from '../../../contexts/AuthContext';
+import {
+  FaTicketAlt,
+  FaClock,
+  FaMapMarkerAlt,
+  FaCreditCard,
+  FaTimes,
+} from 'react-icons/fa';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
@@ -10,10 +15,14 @@ import {
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '../../../contexts/AuthProvider';
 
-const stripePromise = loadStripe('your_stripe_publishable_key');
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
-const PaymentModal = ({ booking, onClose, onSuccess }) => {
+const PaymentForm = ({ booking, onSuccess, onCancel }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -23,131 +32,101 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
     if (!stripe || !elements) return;
 
     setProcessing(true);
+
     try {
       const { data } = await axios.post(
-        `${import.meta.env.VITE_API_URL}/create-payment-intent`,
-        {
+        `${import.meta.env.VITE_API_URL}/api/create-payment-intent`,
+        { amount: booking.totalPrice }
+      );
+
+      const result = await stripe.confirmCardPayment(data.clientSecret, {
+        payment_method: {
+          card: elements.getElement(CardElement),
+        },
+      });
+
+      if (result.error) {
+        toast.error(result.error.message);
+      } else {
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/transactions`, {
+          bookingId: booking._id,
+          ticketId: booking.ticketId,
+          userEmail: booking.userEmail,
+          ticketTitle: booking.ticketTitle,
           amount: booking.totalPrice,
-        }
-      );
+          quantity: booking.bookingQuantity,
+          transactionId: result.paymentIntent.id,
+          paymentDate: new Date(),
+        });
 
-      const { error, paymentIntent } = await stripe.confirmCardPayment(
-        data.clientSecret,
-        {
-          payment_method: {
-            card: elements.getElement(CardElement),
-          },
-        }
-      );
-
-      if (error) {
-        toast.error(error.message);
-      } else if (paymentIntent.status === 'succeeded') {
-        await axios.patch(
-          `${import.meta.env.VITE_API_URL}/bookings/${booking._id}`,
-          {
-            status: 'paid',
-            transactionId: paymentIntent.id,
-          }
-        );
         toast.success('Payment successful!');
         onSuccess();
-        onClose();
       }
     } catch (error) {
       toast.error('Payment failed');
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
-          Complete Payment
-        </h3>
-        <div className="mb-4">
-          <p className="text-gray-600 dark:text-gray-400 mb-2">
-            Amount:{' '}
-            <span className="font-bold text-primary">
-              ${booking.totalPrice}
-            </span>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="card-ticket max-w-md w-full p-8 animate-scale-in">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Complete Payment</h2>
+          <button onClick={onCancel} className="btn-ghost p-2">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="mb-6 p-4 bg-secondary/50 rounded-lg">
+          <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
+          <p className="text-3xl font-bold gradient-text">
+            ${booking.totalPrice}
           </p>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4 p-3 border rounded">
-            <CardElement
-              options={{
-                style: {
-                  base: {
-                    fontSize: '16px',
-                    color: '#424770',
-                    '::placeholder': { color: '#aab7c4' },
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium mb-3">
+              Card Details
+            </label>
+            <div className="p-4 border-2 border-input rounded-lg bg-background">
+              <CardElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: '16px',
+                      color: '#1e293b',
+                      '::placeholder': {
+                        color: '#94a3b8',
+                      },
+                    },
                   },
-                },
-              }}
-            />
+                }}
+              />
+            </div>
           </div>
-          <div className="flex space-x-3">
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="btn-outline flex-1"
+              disabled={processing}
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={!stripe || processing}
-              className="btn-primary flex-1 disabled:opacity-50"
+              className="btn-accent flex-1"
             >
-              {processing ? 'Processing...' : 'Pay Now'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary flex-1"
-            >
-              Cancel
+              {processing ? 'Processing...' : `Pay $${booking.totalPrice}`}
             </button>
           </div>
         </form>
       </div>
-    </div>
-  );
-};
-
-const CountdownTimer = ({ departureDateTime }) => {
-  const [timeLeft, setTimeLeft] = useState('');
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date().getTime();
-      const departure = new Date(departureDateTime).getTime();
-      const distance = departure - now;
-
-      if (distance < 0) {
-        setTimeLeft('Expired');
-        clearInterval(interval);
-      } else {
-        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-        const hours = Math.floor(
-          (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-        );
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [departureDateTime]);
-
-  return (
-    <div className="flex items-center space-x-2 text-sm">
-      <FiClock className="text-primary" />
-      <span
-        className={
-          timeLeft === 'Expired'
-            ? 'text-red-500'
-            : 'text-gray-600 dark:text-gray-400'
-        }
-      >
-        {timeLeft}
-      </span>
     </div>
   );
 };
@@ -160,151 +139,172 @@ const MyBookedTickets = () => {
 
   useEffect(() => {
     fetchBookings();
-  }, [user]);
+  }, []);
 
   const fetchBookings = async () => {
     try {
-      const { data } = await axios.get(
-        `${import.meta.env.VITE_API_URL}/bookings?email=${user.email}`
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/bookings/user/${user.email}`
       );
-      setBookings(data);
+      setBookings(response.data);
     } catch (error) {
-      toast.error('Failed to fetch bookings');
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = status => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-500';
-      case 'accepted':
-        return 'bg-blue-500';
-      case 'rejected':
-        return 'bg-red-500';
-      case 'paid':
-        return 'bg-green-500';
-      default:
-        return 'bg-gray-500';
-    }
+  const getStatusBadge = status => {
+    const badges = {
+      pending: 'badge-pending',
+      accepted: 'badge-accepted',
+      rejected: 'badge-rejected',
+      paid: 'badge-paid',
+    };
+    return badges[status] || 'badge';
   };
 
   const canPay = booking => {
-    const now = new Date().getTime();
-    const departure = new Date(booking.departureDateTime).getTime();
-    return booking.status === 'accepted' && departure > now;
+    const now = new Date();
+    const departure = new Date(booking.departureDateTime);
+    return booking.status === 'accepted' && now < departure;
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="flex justify-center items-center min-h-96">
+        <div
+          className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4"
+          style={{ borderColor: 'hsl(221 83% 53%)' }}
+        ></div>
       </div>
     );
   }
 
   return (
-    <div>
-      <h2 className="text-3xl font-bold mb-8 text-gray-800 dark:text-white">
-        My Booked Tickets
-      </h2>
-
-      {bookings.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 dark:text-gray-400 text-lg">
-            No bookings found. Start booking your tickets!
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="section-title">My Booked Tickets</h1>
+          <p className="text-muted-foreground">
+            View and manage your ticket bookings
           </p>
         </div>
-      ) : (
+        <div className="badge badge-paid text-lg px-4 py-2">
+          {bookings.length} Bookings
+        </div>
+      </div>
+
+      {bookings.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bookings.map(booking => (
+          {bookings.map((booking, index) => (
             <div
               key={booking._id}
-              className="card hover:shadow-xl transition-shadow"
+              className="card-ticket animate-slide-up"
+              style={{ animationDelay: `${index * 50}ms` }}
             >
-              <img
-                src={booking.ticketImage}
-                alt={booking.ticketTitle}
-                className="w-full h-48 object-cover rounded-lg mb-4"
-              />
-
-              <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
-                {booking.ticketTitle}
-              </h3>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                  <FiMapPin />
-                  <span>
-                    {booking.from} → {booking.to}
-                  </span>
-                </div>
-
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                  <FiCalendar />
-                  <span>
-                    {new Date(booking.departureDateTime).toLocaleString()}
-                  </span>
-                </div>
-
-                {booking.status !== 'rejected' && (
-                  <CountdownTimer
-                    departureDateTime={booking.departureDateTime}
-                  />
-                )}
-              </div>
-
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">
-                    Quantity:
-                  </span>
-                  <span className="font-semibold">
-                    {booking.bookingQuantity}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">
-                    Total Price:
-                  </span>
-                  <span className="font-bold text-primary">
-                    ${booking.totalPrice}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600 dark:text-gray-400 text-sm">
-                    Status:
-                  </span>
+              <div className="relative">
+                <img
+                  src={booking.image}
+                  alt={booking.ticketTitle}
+                  className="w-full h-48 object-cover"
+                />
+                <div className="absolute top-4 right-4">
                   <span
-                    className={`px-3 py-1 rounded-full text-white text-xs ${getStatusColor(
+                    className={`badge ${getStatusBadge(
                       booking.status
-                    )}`}
+                    )} text-xs font-bold uppercase`}
                   >
                     {booking.status}
                   </span>
                 </div>
               </div>
 
-              {canPay(booking) && (
-                <button
-                  onClick={() => setSelectedBooking(booking)}
-                  className="btn-primary w-full mt-4"
-                >
-                  Pay Now
-                </button>
-              )}
+              <div className="p-5">
+                <h3 className="text-xl font-bold mb-3 line-clamp-1">
+                  {booking.ticketTitle}
+                </h3>
+
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FaMapMarkerAlt className="flex-shrink-0" />
+                    <span>
+                      {booking.from} → {booking.to}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FaTicketAlt className="flex-shrink-0" />
+                    <span>
+                      {booking.bookingQuantity} × ${booking.unitPrice}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-secondary/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Total Amount
+                    </p>
+                    <p className="text-2xl font-bold gradient-text">
+                      ${booking.totalPrice}
+                    </p>
+                  </div>
+                </div>
+
+                {booking.status !== 'rejected' && (
+                  <div className="glass-card p-3 rounded-lg mb-4 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Departs
+                    </p>
+                    <p className="font-semibold">
+                      {formatDistanceToNow(
+                        new Date(booking.departureDateTime),
+                        { addSuffix: true }
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {canPay(booking) && (
+                  <button
+                    onClick={() => setSelectedBooking(booking)}
+                    className="btn-accent w-full flex items-center justify-center gap-2"
+                  >
+                    <FaCreditCard />
+                    Pay Now
+                  </button>
+                )}
+
+                {booking.status === 'paid' && (
+                  <div className="text-center py-2 text-success font-semibold">
+                    ✓ Payment Completed
+                  </div>
+                )}
+              </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 card-ticket">
+          <div className="text-6xl mb-4">🎫</div>
+          <h3 className="text-2xl font-bold mb-2">No Bookings Yet</h3>
+          <p className="text-muted-foreground mb-6">
+            Start exploring and book your first ticket
+          </p>
+          <a href="/all-tickets" className="btn-primary inline-block">
+            Browse Tickets
+          </a>
         </div>
       )}
 
       {selectedBooking && (
         <Elements stripe={stripePromise}>
-          <PaymentModal
+          <PaymentForm
             booking={selectedBooking}
-            onClose={() => setSelectedBooking(null)}
-            onSuccess={fetchBookings}
+            onSuccess={() => {
+              setSelectedBooking(null);
+              fetchBookings();
+            }}
+            onCancel={() => setSelectedBooking(null)}
           />
         </Elements>
       )}

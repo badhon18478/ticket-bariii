@@ -29,12 +29,13 @@ import AdminProfile from '../pages/dashboard/admin/AdminProfile';
 import ManageTickets from '../pages/dashboard/admin/ManageTickets';
 import ManageUsers from '../pages/dashboard/admin/ManageUsers';
 import AdvertiseTickets from '../pages/dashboard/admin/AdvertiseTickets';
+import BookingPage from '../pages/Dashboard/user/BookingPage';
 
 const router = createBrowserRouter([
   {
     path: '/',
     element: <MainLayout />,
-    // errorElement: <ErrorPage />,
+    errorElement: <ErrorPage />,
     children: [
       {
         path: '/',
@@ -53,6 +54,14 @@ const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <AllTickets />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: '/book-ticket/:id',
+        element: (
+          <PrivateRoute>
+            <BookingPage />
           </PrivateRoute>
         ),
       },
@@ -84,6 +93,10 @@ const router = createBrowserRouter([
           </RoleBasedRoute>
         ),
       },
+      // Update your router.js file
+
+      // In the dashboard children array, add this route:
+
       {
         path: 'my-bookings',
         element: (

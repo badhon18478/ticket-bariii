@@ -1,358 +1,495 @@
-import { useEffect, useState } from 'react';
-import useAxiosSecure from '../../../hooks/useAxiosSecure'; // path adjust করো
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../../contexts/AuthProvider';
+import LoadingSpinner from '../../../components/LoadingSpinner';
+import {
+  FaCheck,
+  FaTimes,
+  FaSearch,
+  FaFilter,
+  FaEye,
+  FaTicketAlt,
+  FaCalendar,
+  FaDollarSign,
+  FaBus,
+  FaTrain,
+  FaShip,
+  FaPlane,
+} from 'react-icons/fa';
+import moment from 'moment';
 
 const ManageTickets = () => {
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filteredTickets, setFilteredTickets] = useState([]);
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const axiosSecure = useAxiosSecure();
-  const ticketsPerPage = 10;
+  // Fetch all tickets with admin authentication
+  const {
+    data: ticketsData,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['adminTickets'],
+    queryFn: async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}/api/tickets/admin/all`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        return response.data.tickets || [];
+      } catch (err) {
+        console.error('Error fetching tickets:', err);
+        throw new Error('Failed to fetch tickets');
+      }
+    },
+    enabled: !!token, // Only fetch if token is available
+    retry: 1,
+  });
 
-  useEffect(() => {
-    fetchTickets();
-  }, []);
-
-  useEffect(() => {
-    // Filter tickets based on search and status
-    let filtered = tickets;
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        ticket =>
-          ticket.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ticket.from?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ticket.to?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ticket.vendorName?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Approve ticket mutation
+  const approveMutation = useMutation({
+    mutationFn: async ticketId => {
+      const response = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tickets/${ticketId}/approve`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(
-        ticket => ticket.verificationStatus === statusFilter
-      );
-    }
-
-    setFilteredTickets(filtered);
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, tickets]);
-
-  const fetchTickets = async () => {
-    try {
-      setLoading(true);
-      const response = await axiosSecure.get('/api/tickets/admin/all');
-
-      // Safety check
-      const ticketData = Array.isArray(response.data) ? response.data : [];
-      setTickets(ticketData);
-    } catch (error) {
-      console.error('Error fetching tickets:', error);
-      toast.error('Failed to load tickets');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApprove = async id => {
-    try {
-      await axiosSecure.patch(`/api/tickets/${id}/approve`);
+      return response.data;
+    },
+    onSuccess: () => {
       toast.success('Ticket approved successfully');
-      fetchTickets();
-    } catch (error) {
-      toast.error('Failed to approve ticket');
-    }
-  };
+      queryClient.invalidateQueries(['adminTickets']);
+    },
+    onError: error => {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Failed to approve ticket';
+      toast.error(errorMessage);
+    },
+  });
 
-  const handleReject = async id => {
-    try {
-      await axiosSecure.patch(`/api/tickets/${id}/reject`);
+  // Reject ticket mutation
+  const rejectMutation = useMutation({
+    mutationFn: async ticketId => {
+      const response = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tickets/${ticketId}/reject`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
       toast.success('Ticket rejected');
-      fetchTickets();
-    } catch (error) {
-      toast.error('Failed to reject ticket');
-    }
-  };
+      queryClient.invalidateQueries(['adminTickets']);
+    },
+    onError: error => {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Failed to reject ticket';
+      toast.error(errorMessage);
+    },
+  });
+
+  // Filter tickets
+  const filteredTickets = React.useMemo(() => {
+    if (!ticketsData) return [];
+
+    return ticketsData.filter(ticket => {
+      const matchesSearch =
+        searchTerm === '' ||
+        (ticket.title &&
+          ticket.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ticket.vendorName &&
+          ticket.vendorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ticket.from &&
+          ticket.from.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ticket.to &&
+          ticket.to.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesStatus =
+        statusFilter === 'all' || ticket.verificationStatus === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [ticketsData, searchTerm, statusFilter]);
 
   const getStatusColor = status => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
       case 'approved':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
       case 'rejected':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
     }
   };
 
-  // Pagination
-  const indexOfLastTicket = currentPage * ticketsPerPage;
-  const indexOfFirstTicket = indexOfLastTicket - ticketsPerPage;
-  const currentTickets = filteredTickets.slice(
-    indexOfFirstTicket,
-    indexOfLastTicket
-  );
-  const totalPages = Math.ceil(filteredTickets.length / ticketsPerPage);
+  const getTransportIcon = type => {
+    if (!type) return <FaBus className="text-gray-500" />;
 
-  const paginate = pageNumber => setCurrentPage(pageNumber);
+    switch (type.toLowerCase()) {
+      case 'bus':
+        return <FaBus className="text-green-500" />;
+      case 'train':
+        return <FaTrain className="text-blue-500" />;
+      case 'launch':
+        return <FaShip className="text-purple-500" />;
+      case 'plane':
+        return <FaPlane className="text-red-500" />;
+      default:
+        return <FaBus className="text-gray-500" />;
+    }
+  };
 
-  if (loading) {
+  const formatDate = date => {
+    if (!date) return 'N/A';
+    return moment(date).format('DD MMM YYYY');
+  };
+
+  if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[400px] p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner />
+        <span className="ml-3 text-gray-600 dark:text-gray-300">
+          Loading tickets...
+        </span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mb-2">
+          Failed to Load Tickets
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300 mb-4">
+          {error.message || 'Unable to fetch tickets. Please try again.'}
+        </p>
+        <button
+          onClick={() => queryClient.invalidateQueries(['adminTickets'])}
+          className="btn-primary px-6 py-2"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manage Tickets</h1>
-          <p className="text-gray-600 mt-1">
-            {filteredTickets.length} of {tickets.length} tickets
+          <h2 className="text-3xl font-bold text-gray-800 dark:text-white">
+            Manage Tickets
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            Approve or reject tickets submitted by vendors
           </p>
         </div>
-        <button
-          onClick={fetchTickets}
-          className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium"
-        >
-          Refresh
-        </button>
+
+        <div className="mt-4 md:mt-0 flex items-center space-x-4">
+          <div className="text-right">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              Total Tickets
+            </div>
+            <div className="text-2xl font-bold text-gray-800 dark:text-white">
+              {ticketsData?.length || 0}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="Search by title, route, or vendor..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            />
-            <svg
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Search Tickets
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FaSearch className="text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by title, vendor, or route"
+                className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
               />
-            </svg>
+            </div>
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 md:w-48"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Status Filter
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FaFilter className="text-gray-400" />
+              </div>
+              <select
+                className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                {ticketsData?.filter(t => t.verificationStatus === 'pending')
+                  .length || 0}
+              </div>
+              <div className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+                Pending
+              </div>
+            </div>
+            <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {ticketsData?.filter(t => t.verificationStatus === 'approved')
+                  .length || 0}
+              </div>
+              <div className="text-sm text-green-600 dark:text-green-400 mt-1">
+                Approved
+              </div>
+            </div>
+            <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                {ticketsData?.filter(t => t.verificationStatus === 'rejected')
+                  .length || 0}
+              </div>
+              <div className="text-sm text-red-600 dark:text-red-400 mt-1">
+                Rejected
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      {filteredTickets.length > 0 ? (
-        <>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Image
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Title
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Route
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Price
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Vendor
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {currentTickets.map(ticket => (
-                    <tr
-                      key={ticket._id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-6 py-4">
+      {/* Tickets Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+        {filteredTickets?.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Ticket Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Vendor
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Price & Quantity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {filteredTickets.map(ticket => (
+                  <tr
+                    key={ticket._id}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-start space-x-4">
                         <img
-                          src={ticket.image || '/placeholder-image.jpg'}
+                          src={ticket.image || '/default-ticket.jpg'}
                           alt={ticket.title}
-                          className="w-16 h-16 object-cover rounded-xl shadow-sm"
+                          className="w-16 h-16 object-cover rounded-lg"
                           onError={e => {
-                            e.target.src = '/placeholder-image.jpg';
+                            e.target.src = '/default-ticket.jpg';
                           }}
                         />
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-gray-900">
-                          {ticket.title}
-                        </p>
-                        <p className="text-sm text-gray-500 capitalize">
-                          {ticket.transportType}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-medium text-gray-900">
-                          {ticket.from} → {ticket.to}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-green-600 text-lg">
-                          ৳{ticket.price}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-gray-900">
-                          {ticket.vendorName}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate max-w-[150px]">
-                          {ticket.vendorEmail}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
-                            ticket.verificationStatus
-                          )}`}
-                        >
-                          {ticket.verificationStatus?.toUpperCase() ||
-                            'UNKNOWN'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {ticket.verificationStatus === 'pending' ? (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleApprove(ticket._id)}
-                              className="bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 text-sm font-medium shadow-sm transition-all flex items-center gap-1"
-                            >
-                              ✓ Approve
-                            </button>
-                            <button
-                              onClick={() => handleReject(ticket._id)}
-                              className="bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 text-sm font-medium shadow-sm transition-all flex items-center gap-1"
-                            >
-                              ✗ Reject
-                            </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 dark:text-white truncate">
+                            {ticket.title || 'Untitled Ticket'}
                           </div>
-                        ) : (
-                          <span className="text-sm text-gray-500">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                          <div className="flex items-center space-x-2 mt-1">
+                            {getTransportIcon(ticket.transportType)}
+                            <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
+                              {ticket.transportType || 'N/A'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                            {ticket.from || 'Unknown'} →{' '}
+                            {ticket.to || 'Unknown'}
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            <FaCalendar />
+                            <span>{formatDate(ticket.departure)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ticket.vendorName || 'Unknown Vendor'}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {ticket.vendorEmail || 'N/A'}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <FaDollarSign className="text-green-500" />
+                          <span className="font-bold">
+                            ${ticket.price?.toFixed(2) || '0.00'}
+                          </span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            per ticket
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <FaTicketAlt className="text-blue-500" />
+                          <span className="font-bold">
+                            {ticket.quantity || 0}
+                          </span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            available
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                          ticket.verificationStatus
+                        )}`}
+                      >
+                        {ticket.verificationStatus === 'pending' && '⏳'}
+                        {ticket.verificationStatus === 'approved' && '✓'}
+                        {ticket.verificationStatus === 'rejected' && '✗'}
+                        <span className="ml-1 capitalize">
+                          {ticket.verificationStatus || 'unknown'}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() =>
+                            window.open(`/ticket/${ticket._id}`, '_blank')
+                          }
+                          className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="View Details"
+                        >
+                          <FaEye />
+                        </button>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-4 bg-white rounded-2xl shadow-sm border border-gray-100">
-              <div className="text-sm text-gray-700">
-                Showing{' '}
-                <span className="font-medium">{indexOfFirstTicket + 1}</span> to{' '}
-                <span className="font-medium">
-                  {Math.min(indexOfLastTicket, filteredTickets.length)}
-                </span>{' '}
-                of <span className="font-medium">{filteredTickets.length}</span>{' '}
-                results
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => paginate(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                >
-                  Previous
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  number => (
-                    <button
-                      key={number}
-                      onClick={() => paginate(number)}
-                      className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
-                        currentPage === number
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'border border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {number}
-                    </button>
-                  )
-                )}
-                <button
-                  onClick={() => paginate(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100">
-          <div className="text-gray-400 mb-4">
-            <svg
-              className="mx-auto h-12 w-12"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-6a2 2 0 012 2v3a2 2 0 01-2 2h-.5"
-              />
-            </svg>
+                        {ticket.verificationStatus === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => approveMutation.mutate(ticket._id)}
+                              disabled={approveMutation.isLoading}
+                              className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Approve"
+                            >
+                              <FaCheck />
+                            </button>
+                            <button
+                              onClick={() => rejectMutation.mutate(ticket._id)}
+                              disabled={rejectMutation.isLoading}
+                              className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Reject"
+                            >
+                              <FaTimes />
+                            </button>
+                          </>
+                        )}
+
+                        {ticket.verificationStatus === 'approved' && (
+                          <button
+                            onClick={() => rejectMutation.mutate(ticket._id)}
+                            disabled={rejectMutation.isLoading}
+                            className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Reject"
+                          >
+                            <FaTimes />
+                          </button>
+                        )}
+
+                        {ticket.verificationStatus === 'rejected' && (
+                          <button
+                            onClick={() => approveMutation.mutate(ticket._id)}
+                            disabled={approveMutation.isLoading}
+                            className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Approve"
+                          >
+                            <FaCheck />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            No tickets found
-          </h3>
-          <p className="text-gray-500 mb-6">
-            Try adjusting your search or filter criteria
-          </p>
-          <button
-            onClick={fetchTickets}
-            className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium"
-          >
-            Refresh Data
-          </button>
-        </div>
-      )}
+        ) : (
+          <div className="text-center py-16">
+            <div className="text-6xl mb-4">🎫</div>
+            <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+              No Tickets Found
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              {searchTerm || statusFilter !== 'all'
+                ? 'Try adjusting your search filters'
+                : 'No tickets have been submitted yet'}
+            </p>
+            {(searchTerm || statusFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                }}
+                className="mt-4 px-6 py-2 btn-secondary"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

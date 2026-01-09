@@ -1,50 +1,55 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
+import DashboardLayout from '../layouts/Dashboard/DashboardLayout';
+import PrivateRoute from '../contexts/PrivateRoute';
+import RoleBasedRoute from './RoleBaseRoute';
+
+// Pages
 import Home from '../pages/Home';
 import Login from '../pages/Login';
 import Register from '../pages/Register/Register';
 import AllTickets from '../pages/AllTickets';
 import TicketDetails from '../pages/TicketDetails';
+import ErrorPage from '../pages/Error';
 
-// Dashboard Layouts
-import UserDashboardLayout from '../layouts/dashboard/UserDashboardLayout';
-import VendorDashboardLayout from '../layouts/dashboard/VendorDashboardLayout';
-import AdminDashboardLayout from '../layouts/dashboard/AdminDashboardLayout';
-
-// Dashboard Pages
+// User Dashboard
 import UserProfile from '../pages/dashboard/user/UserProfile';
-import MyBookedTickets from '../pages/dashboard/user/MyBookedTickets';
+import MyBookings from '../pages/dashboard/user/MyBookedTickets';
 import TransactionHistory from '../pages/dashboard/user/TransactionHistory';
 
+// Vendor Dashboard
 import VendorProfile from '../pages/dashboard/vendor/VendorProfile';
 import AddTicket from '../pages/dashboard/vendor/AddTicket';
-import MyAddedTickets from '../pages/dashboard/vendor/MyAddedTickets';
+import MyTickets from '../pages/dashboard/vendor/MyAddedTickets';
 import RequestedBookings from '../pages/dashboard/vendor/RequestedBookings';
 import RevenueOverview from '../pages/dashboard/vendor/RevenueOverview';
 
+// Admin Dashboard
 import AdminProfile from '../pages/dashboard/admin/AdminProfile';
 import ManageTickets from '../pages/dashboard/admin/ManageTickets';
 import ManageUsers from '../pages/dashboard/admin/ManageUsers';
 import AdvertiseTickets from '../pages/dashboard/admin/AdvertiseTickets';
 
-// Auth
-import PrivateRoute from '../contexts/PrivateRoute';
-import RoleBasedRoute from '../contexts/RoleBasedRoute';
-import NotFound from '../pages/Error';
-import DashboardRedirect from '../layouts/Dashboard/DashboardRedirect';
-
-// Add this redirect component
-// import DashboardRedirect from '../components/DashboardRedirect';
-
-export const router = createBrowserRouter([
-  // ================= MAIN =================
+const router = createBrowserRouter([
   {
     path: '/',
     element: <MainLayout />,
+    // errorElement: <ErrorPage />,
     children: [
-      { index: true, element: <Home /> },
       {
-        path: 'all-tickets',
+        path: '/',
+        element: <Home />,
+      },
+      {
+        path: '/login',
+        element: <Login />,
+      },
+      {
+        path: '/register',
+        element: <Register />,
+      },
+      {
+        path: '/all-tickets',
         element: (
           <PrivateRoute>
             <AllTickets />
@@ -52,74 +57,127 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'tickets/:id',
+        path: '/ticket/:id',
         element: (
           <PrivateRoute>
             <TicketDetails />
           </PrivateRoute>
         ),
       },
-      { path: 'login', element: <Login /> },
-      { path: 'register', element: <Register /> },
-      { path: 'dashboard-redirect', element: <DashboardRedirect /> },
-      { path: '*', element: <NotFound /> },
     ],
   },
-
-  // ================= USER DASHBOARD =================
   {
     path: '/dashboard',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute allowedRoles={['user']}>
-          <UserDashboardLayout />
-        </RoleBasedRoute>
+        <DashboardLayout />
       </PrivateRoute>
     ),
+    errorElement: <ErrorPage />,
     children: [
-      { index: true, element: <Navigate to="profile" replace /> },
-      { path: 'profile', element: <UserProfile /> },
-      { path: 'bookings', element: <MyBookedTickets /> },
-      { path: 'transactions', element: <TransactionHistory /> },
-    ],
-  },
+      // User Routes
+      {
+        path: 'user-profile',
+        element: (
+          <RoleBasedRoute allowedRoles={['user', 'vendor', 'admin']}>
+            <UserProfile />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'my-bookings',
+        element: (
+          <RoleBasedRoute allowedRoles={['user']}>
+            <MyBookings />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'transaction-history',
+        element: (
+          <RoleBasedRoute allowedRoles={['user']}>
+            <TransactionHistory />
+          </RoleBasedRoute>
+        ),
+      },
 
-  // ================= VENDOR DASHBOARD =================
-  {
-    path: '/vendor-dashboard',
-    element: (
-      <PrivateRoute>
-        <RoleBasedRoute allowedRoles={['vendor']}>
-          <VendorDashboardLayout />
-        </RoleBasedRoute>
-      </PrivateRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="profile" replace /> },
-      { path: 'profile', element: <VendorProfile /> },
-      { path: 'add-ticket', element: <AddTicket /> },
-      { path: 'my-tickets', element: <MyAddedTickets /> },
-      { path: 'bookings', element: <RequestedBookings /> },
-      { path: 'revenue', element: <RevenueOverview /> },
-    ],
-  },
+      // Vendor Routes
+      {
+        path: 'vendor-profile',
+        element: (
+          <RoleBasedRoute allowedRoles={['vendor']}>
+            <VendorProfile />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'add-ticket',
+        element: (
+          <RoleBasedRoute allowedRoles={['vendor']}>
+            <AddTicket />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'my-tickets',
+        element: (
+          <RoleBasedRoute allowedRoles={['vendor']}>
+            <MyTickets />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'requested-bookings',
+        element: (
+          <RoleBasedRoute allowedRoles={['vendor']}>
+            <RequestedBookings />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'revenue-overview',
+        element: (
+          <RoleBasedRoute allowedRoles={['vendor']}>
+            <RevenueOverview />
+          </RoleBasedRoute>
+        ),
+      },
 
-  // ================= ADMIN DASHBOARD =================
-  {
-    path: '/admin-dashboard',
-    element: (
-      <PrivateRoute>
-        <RoleBasedRoute allowedRoles={['admin']}>
-          <AdminDashboardLayout />
-        </RoleBasedRoute>
-      </PrivateRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="profile" replace /> },
-      { path: 'profile', element: <AdminProfile /> },
-      { path: 'manage-tickets', element: <ManageTickets /> },
-      { path: 'manage-users', element: <ManageUsers /> },
-      { path: 'advertise-tickets', element: <AdvertiseTickets /> },
+      // Admin Routes
+      {
+        path: 'admin-profile',
+        element: (
+          <RoleBasedRoute allowedRoles={['admin']}>
+            <AdminProfile />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'manage-tickets',
+        element: (
+          <RoleBasedRoute allowedRoles={['admin']}>
+            <ManageTickets />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'manage-users',
+        element: (
+          <RoleBasedRoute allowedRoles={['admin']}>
+            <ManageUsers />
+          </RoleBasedRoute>
+        ),
+      },
+      {
+        path: 'advertise-tickets',
+        element: (
+          <RoleBasedRoute allowedRoles={['admin']}>
+            <AdvertiseTickets />
+          </RoleBasedRoute>
+        ),
+      },
     ],
   },
 ]);
+
+export default router;

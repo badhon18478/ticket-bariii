@@ -19,9 +19,12 @@ import {
   FaMoneyBillWave,
   FaLock,
   FaShieldAlt,
+  FaExclamationTriangle,
+  FaSync,
 } from 'react-icons/fa';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, Navigation } from 'swiper/modules';
+import { useQuery } from '@tanstack/react-query';
 
 import 'swiper/css';
 import 'swiper/css/pagination';
@@ -29,66 +32,91 @@ import 'swiper/css/navigation';
 
 import useAxiosSecure from '../hooks/useAxiosSecure';
 import LoadingSpinner from '../components/LoadingSpinner';
-import TicketCard from '../components/tickets/TicketCard';
+// import TicketCard from '../components/tickets/TicketCard';
 import { useTheme } from '../hooks/useTheme';
-// import Banner from '../components/Banner';
+import TicketCard from '../components/TicketCard';
 
 const Home = () => {
-  const [advertisedTickets, setAdvertisedTickets] = useState([]);
-  const [latestTickets, setLatestTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchData, setSearchData] = useState({ from: '', to: '', date: '' });
-  const [error, setError] = useState(null);
+  const [transportType, setTransportType] = useState('all');
 
   const { theme } = useTheme();
   const navigate = useNavigate();
   const axiosSecure = useAxiosSecure();
 
-  useEffect(() => {
-    fetchTickets();
-  }, []);
+  // Fetch advertised tickets using React Query
+  const {
+    data: advertisedData,
+    isLoading: loadingAdvertised,
+    error: advertisedError,
+    refetch: refetchAdvertised,
+  } = useQuery({
+    queryKey: ['advertisedTickets'],
+    queryFn: async () => {
+      try {
+        const response = await axiosSecure.get('/api/tickets/advertised');
+        // console.log('Advertised API Response:');
 
-  const fetchTickets = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+        // Handle different response formats
+        const tickets =
+          response.data?.tickets ||
+          response.data?.data?.tickets ||
+          response.data?.data ||
+          response.data ||
+          [];
 
-      const [advertisedRes, latestRes] = await Promise.all([
-        axiosSecure.get('/api/tickets/advertised'),
-        axiosSecure.get('/api/tickets/latest'),
-      ]);
+        return Array.isArray(tickets) ? tickets : [];
+      } catch (error) {
+        console.error('Error fetching advertised tickets:', error);
+        throw new Error(
+          error.response?.data?.message || 'Failed to fetch featured tickets'
+        );
+      }
+    },
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
+  });
 
-      // ✅ FIX: Proper API response handling
-      console.log('Advertised response:', advertisedRes.data);
-      console.log('Latest response:', latestRes.data);
+  // Fetch latest tickets using React Query with transport filter
+  const {
+    data: latestData,
+    isLoading: loadingLatest,
+    error: latestError,
+    refetch: refetchLatest,
+  } = useQuery({
+    queryKey: ['latestTickets', transportType],
+    queryFn: async () => {
+      try {
+        const params = transportType !== 'all' ? { transportType } : {};
+        const response = await axiosSecure.get('/api/tickets/latest', {
+          params,
+        });
+        // console.log('Latest API Response:');
 
-      // Handle both response formats
-      setAdvertisedTickets(
-        advertisedRes.data?.tickets ||
-          advertisedRes.data?.data?.tickets ||
-          advertisedRes.data ||
-          []
-      );
+        // Handle different response formats
+        const tickets =
+          response.data?.tickets ||
+          response.data?.data?.tickets ||
+          response.data?.data ||
+          response.data ||
+          [];
 
-      setLatestTickets(
-        latestRes.data?.tickets ||
-          latestRes.data?.data?.tickets ||
-          latestRes.data ||
-          []
-      );
-    } catch (error) {
-      console.error('Error fetching tickets:', error);
-      setError('Failed to load tickets. Please try again later.');
+        return Array.isArray(tickets) ? tickets : [];
+      } catch (error) {
+        console.error('Error fetching latest tickets:', error);
+        throw new Error(
+          error.response?.data?.message || 'Failed to fetch latest tickets'
+        );
+      }
+    },
+    retry: 2,
+    staleTime: 2 * 60 * 1000, // 2 minutes cache
+  });
 
-      // Fallback to mock data
-      setAdvertisedTickets(generateMockTickets('Featured'));
-      setLatestTickets(generateMockTickets('Latest'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateMockTickets = type => {
+  // Generate mock data fallback with safe string operations
+  // Home.jsx - শুধু generateMockTickets ফাংশন আপডেট করি
+  const generateMockTickets = (type, count = 6) => {
     const transportTypes = ['bus', 'train', 'launch', 'plane'];
     const destinations = [
       'Chittagong',
@@ -96,68 +124,126 @@ const Home = () => {
       "Cox's Bazar",
       'Rajshahi',
       'Khulna',
+      'Barisal',
     ];
-    const perksOptions = [
-      ['AC', 'WiFi'],
-      ['Breakfast', 'TV'],
-      ['Lunch', 'Charging Port'],
-      ['Dinner', 'Blanket'],
-      ['Snacks', 'Water'],
-      ['AC', 'WiFi', 'TV'],
+    const vendors = [
+      'Premium Express',
+      'Super Travels',
+      'Green Line',
+      'Shohagh Paribahan',
+      'Hanif Enterprise',
+      'Soudia Coach',
     ];
 
-    return Array(6)
+    return Array(count)
       .fill(null)
       .map((_, i) => {
         const departureDate = new Date();
         departureDate.setDate(departureDate.getDate() + i + 1);
 
+        const transport = transportTypes[i % 4];
+        const transportCapitalized = transport
+          ? transport.charAt(0).toUpperCase() + transport.slice(1)
+          : 'Transport';
+
+        const departureHour = 8 + (i % 12);
+        const departureTimeString = `${departureHour}:${
+          i % 2 === 0 ? '00' : '30'
+        } ${departureHour >= 12 ? 'PM' : 'AM'}`;
+
         return {
           _id: `${type}-${i}-${Date.now()}`,
-          title: `${type} ${
-            transportTypes[i % 4].charAt(0).toUpperCase() +
-            transportTypes[i % 4].slice(1)
-          } Ticket ${i + 1}`,
+          title: `${
+            type === 'Featured' ? 'Featured ' : ''
+          }${transportCapitalized} Service ${i + 1}`,
           from: 'Dhaka',
-          to: destinations[i % 5],
-          departure: departureDate.toISOString(),
-          departureTime: `${8 + (i % 12)}:${i % 2 === 0 ? '00' : '30'} ${
-            8 + (i % 12) >= 12 ? 'PM' : 'AM'
-          }`,
+          to: destinations[i % destinations.length],
+          departure: departureDate.toISOString(), // ✅ ISO format এ রাখুন
+          departureTime: departureTimeString, // ✅ string format এ সময়
           price: 550 + i * 45,
-          transportType: transportTypes[i % 4],
+          transportType: transport,
           quantity: 25 + i * 3,
           availableQuantity: 15 + i,
-          perks: perksOptions[i % 6],
+          perks: ['AC', 'WiFi', 'Water', 'Snacks'].slice(0, (i % 3) + 1),
           image: `https://images.unsplash.com/photo-${
-            ['1544620347', '1593642632827', '1566836610'][i % 3]
+            ['1544620347', '1593642632827', '1566836610', '1512295767273'][
+              i % 4
+            ]
           }?auto=format&fit=crop&w=800&q=80`,
           verificationStatus: 'approved',
           isAdvertised: type === 'Featured',
-          vendorName: [
-            'Premium Express',
-            'Super Travels',
-            'Green Line',
-            'Shohagh Paribahan',
-          ][i % 4],
+          vendorName: vendors[i % vendors.length],
           vendorEmail: 'vendor@example.com',
           isHidden: false,
           createdAt: new Date().toISOString(),
+          discount:
+            type === 'Featured' ? Math.floor(Math.random() * 30) + 10 : 0,
         };
       });
   };
 
+  // ✅ FIX: Safe data handling
+  const getAdvertisedTickets = () => {
+    if (!advertisedData) {
+      // console.log('Using mock advertised tickets');
+      return generateMockTickets('Featured');
+    }
+
+    // Filter out invalid tickets
+    const validTickets = advertisedData.filter(
+      ticket => ticket && ticket._id && ticket.title && ticket.transportType
+    );
+
+    return validTickets.length > 0
+      ? validTickets
+      : generateMockTickets('Featured');
+  };
+
+  const getLatestTickets = () => {
+    if (!latestData) {
+      // console.log('Using mock latest tickets');
+      return generateMockTickets('Latest', 8);
+    }
+
+    // Filter out invalid tickets
+    const validTickets = latestData.filter(
+      ticket => ticket && ticket._id && ticket.title && ticket.transportType
+    );
+
+    return validTickets.length > 0
+      ? validTickets
+      : generateMockTickets('Latest', 8);
+  };
+
+  // Use safe data getters
+  const advertisedTickets = getAdvertisedTickets();
+  const latestTickets = getLatestTickets();
+
+  // Filter latest tickets by transport type with safe checks
+  const filteredLatestTickets = React.useMemo(() => {
+    if (transportType === 'all') {
+      return latestTickets;
+    }
+
+    return latestTickets.filter(ticket => {
+      // ✅ FIX: Safe type comparison
+      if (!ticket || !ticket.transportType) return false;
+      return ticket.transportType.toLowerCase() === transportType.toLowerCase();
+    });
+  }, [latestTickets, transportType]);
+
   const handleSearch = e => {
     e.preventDefault();
     if (searchData.from && searchData.to) {
-      const query = new URLSearchParams({
+      const queryParams = new URLSearchParams({
         from: searchData.from,
         to: searchData.to,
         ...(searchData.date && { date: searchData.date }),
+        ...(transportType !== 'all' && { transportType }),
       }).toString();
-      navigate(`/all-tickets?${query}`);
+
+      navigate(`/all-tickets?${queryParams}`);
     } else {
-      // Show alert if search fields are empty
       alert('Please enter both From and To locations');
     }
   };
@@ -185,24 +271,50 @@ const Home = () => {
     },
   ];
 
-  // ✅ FIX: Improved loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <LoadingSpinner />
-          <p className="mt-4 text-gray-600 dark:text-gray-400">
-            Loading tickets...
-          </p>
-        </div>
+  // Error Component
+  const ErrorDisplay = ({ error, onRetry }) => (
+    <div className="text-center py-12">
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-3xl p-8 max-w-md mx-auto">
+        <FaExclamationTriangle className="text-red-500 text-4xl mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-red-700 dark:text-red-400 mb-2">
+          Something went wrong
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">
+          {error?.message || 'Failed to load data'}
+        </p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-2 bg-red-100 dark:bg-red-800/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-700 dark:text-red-300 px-6 py-3 rounded-xl font-semibold transition-colors mx-auto"
+          >
+            <FaSync /> Try Again
+          </button>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+
+  // Loading Skeleton
+  const TicketSkeleton = ({ count = 3 }) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="animate-pulse">
+          <div className="bg-gray-200 dark:bg-gray-800 rounded-3xl p-6">
+            <div className="h-48 bg-gray-300 dark:bg-gray-700 rounded-2xl mb-4"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-3/4"></div>
+              <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-1/2"></div>
+              <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-2/3"></div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 transition-colors duration-500">
       {/* HERO SECTION */}
-      {/* <Banner></Banner> */}
       <section
         className={`relative pt-28 md:pt-32 pb-20 px-4 overflow-hidden ${
           theme === 'dark'
@@ -294,8 +406,8 @@ const Home = () => {
               {/* button */}
               <button
                 type="submit"
-                className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-semibold text-sm md:text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:cursor-not-allowed"
                 disabled={!searchData.from || !searchData.to}
+                className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-semibold text-sm md:text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <FaSearch />
                 <span>Search Tickets</span>
@@ -363,7 +475,11 @@ const Home = () => {
             )}
           </div>
 
-          {advertisedTickets.length === 0 ? (
+          {loadingAdvertised ? (
+            <TicketSkeleton count={3} />
+          ) : advertisedError ? (
+            <ErrorDisplay error={advertisedError} onRetry={refetchAdvertised} />
+          ) : advertisedTickets.length === 0 ? (
             <div className="text-center py-16">
               <FaStar className="text-5xl text-yellow-400 mx-auto mb-4 opacity-60" />
               <h3 className="text-2xl font-bold text-gray-600 dark:text-gray-400 mb-2">
@@ -372,22 +488,25 @@ const Home = () => {
               <p className="text-gray-500 dark:text-gray-500 max-w-md mx-auto">
                 Check back soon for special offers!
               </p>
-              {error && (
-                <p className="text-red-500 dark:text-red-400 mt-2 text-sm">
-                  {error}
-                </p>
-              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {advertisedTickets.map(ticket => (
-                <div
-                  key={ticket._id}
-                  className="transform hover:scale-[1.03] transition-all duration-300"
-                >
-                  <TicketCard ticket={ticket} />
-                </div>
-              ))}
+              {advertisedTickets.map((ticket, index) => {
+                // ✅ FIX: Safe ticket validation
+                if (!ticket || !ticket._id) {
+                  console.warn(`Invalid ticket at index ${index}:`, ticket);
+                  return null; // Skip invalid tickets
+                }
+
+                return (
+                  <div
+                    key={ticket._id || index}
+                    className="transform hover:scale-[1.03] transition-all duration-300"
+                  >
+                    <TicketCard ticket={ticket} featured />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -412,36 +531,39 @@ const Home = () => {
               label: 'Luxury Bus',
               desc: 'AC / Non-AC sleeper coaches',
               color: 'from-blue-500 to-blue-700',
+              type: 'bus',
             },
             {
               icon: <FaTrain />,
               label: 'Express Train',
               desc: 'Intercity high-speed trains',
               color: 'from-green-500 to-green-700',
+              type: 'train',
             },
             {
               icon: <FaShip />,
               label: 'River Cruise',
               desc: 'Luxury launch cabins',
               color: 'from-cyan-500 to-cyan-700',
+              type: 'launch',
             },
             {
               icon: <FaPlane />,
               label: 'Air Ticket',
               desc: 'Domestic & international flights',
               color: 'from-indigo-500 to-indigo-700',
+              type: 'plane',
             },
           ].map((item, i) => (
             <div
               key={i}
               className="group cursor-pointer bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-lg hover:shadow-2xl transition-all border border-transparent hover:border-blue-500/30"
-              onClick={() =>
+              onClick={() => {
+                setTransportType(item.type);
                 navigate('/all-tickets', {
-                  state: {
-                    transportType: item.label.toLowerCase().split(' ')[0],
-                  },
-                })
-              }
+                  state: { transportType: item.type },
+                });
+              }}
             >
               <div
                 className={`w-20 h-20 mx-auto bg-gradient-to-br ${item.color} text-white rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-xl group-hover:rotate-6 transition-transform`}
@@ -462,19 +584,42 @@ const Home = () => {
       {/* 5. LATEST UPDATES CAROUSEL */}
       <section className="py-20 px-4 dark:bg-gray-950">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 text-center flex items-center justify-center gap-4">
-            <FaClock className="text-orange-500" />
-            Recently Added Routes
-          </h2>
+          <div className="flex justify-between items-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-4">
+              <FaClock className="text-orange-500" />
+              Recently Added Routes
+            </h2>
 
-          {latestTickets.length === 0 ? (
+            {/* Transport Type Filter */}
+            <div className="flex items-center gap-3">
+              <select
+                value={transportType}
+                onChange={e => setTransportType(e.target.value)}
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-orange-500 outline-none"
+              >
+                <option value="all">All Transports</option>
+                <option value="bus">Bus Only</option>
+                <option value="train">Train Only</option>
+                <option value="launch">Launch Only</option>
+                <option value="plane">Plane Only</option>
+              </select>
+            </div>
+          </div>
+
+          {loadingLatest ? (
+            <TicketSkeleton count={4} />
+          ) : latestError ? (
+            <ErrorDisplay error={latestError} onRetry={refetchLatest} />
+          ) : filteredLatestTickets.length === 0 ? (
             <div className="text-center py-16">
               <FaClock className="text-5xl text-gray-400 mx-auto mb-4 opacity-60" />
               <h3 className="text-2xl font-bold text-gray-600 dark:text-gray-400 mb-2">
                 No Recent Tickets
               </h3>
               <p className="text-gray-500 dark:text-gray-500 max-w-md mx-auto">
-                New tickets will appear here soon!
+                {transportType !== 'all'
+                  ? `No ${transportType} tickets available at the moment`
+                  : 'New tickets will appear here soon!'}
               </p>
             </div>
           ) : (
@@ -485,26 +630,39 @@ const Home = () => {
               breakpoints={{
                 640: { slidesPerView: 2 },
                 1024: { slidesPerView: 3 },
+                1280: { slidesPerView: 4 },
               }}
               autoplay={{
                 delay: 3500,
                 disableOnInteraction: false,
+                pauseOnMouseEnter: true,
               }}
               pagination={{
                 clickable: true,
                 dynamicBullets: true,
               }}
               navigation={true}
-              loop={latestTickets.length > 3}
+              loop={filteredLatestTickets.length > 3}
               className="pb-16"
             >
-              {latestTickets.map(ticket => (
-                <SwiperSlide key={ticket._id}>
-                  <div className="p-2">
-                    <TicketCard ticket={ticket} />
-                  </div>
-                </SwiperSlide>
-              ))}
+              {filteredLatestTickets.map((ticket, index) => {
+                // ✅ FIX: Safe ticket validation for Swiper
+                if (!ticket || !ticket._id) {
+                  console.warn(
+                    `Invalid ticket in Swiper at index ${index}:`,
+                    ticket
+                  );
+                  return null;
+                }
+
+                return (
+                  <SwiperSlide key={ticket._id}>
+                    <div className="p-2">
+                      <TicketCard ticket={ticket} />
+                    </div>
+                  </SwiperSlide>
+                );
+              })}
             </Swiper>
           )}
         </div>

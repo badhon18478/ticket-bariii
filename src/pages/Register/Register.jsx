@@ -1,465 +1,631 @@
-// src/pages/Register.jsx
-
-import { useState } from 'react';
-// import { useAuth } from '../contexts/AuthContext';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import { useForm } from 'react-hook-form';
+import {
+  FaGoogle,
+  FaUser,
+  FaEnvelope,
+  FaLock,
+  FaEye,
+  FaEyeSlash,
+  FaImage,
+  FaBus,
+  FaCheckCircle,
+  FaUsers,
+  FaStore,
+  FaShieldAlt,
+  FaTicketAlt,
+} from 'react-icons/fa';
+import toast from 'react-hot-toast';
+import axios from 'axios';
 import { useAuth } from '../../contexts/AuthProvider';
+// import { useAuth } from '../../contexts/AuthProvider';
 
 const Register = () => {
-  const { register, updateUserProfile, googleLogin } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState('user');
+  const { register: signup, googlelogin } = useAuth();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    photoURL: '',
-    password: '',
-    role: 'user',
-  });
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm();
 
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const password = watch('password');
 
-  const handleChange = e => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  // Password validation function
+  const validatePassword = value => {
+    if (!value) return 'Password is required';
+    if (value.length < 6) return 'Password must be at least 6 characters';
+    if (!/[A-Z]/.test(value))
+      return 'Must contain at least one uppercase letter';
+    if (!/[a-z]/.test(value))
+      return 'Must contain at least one lowercase letter';
+    return true;
   };
 
-  const validatePassword = password => {
-    const errors = [];
-    if (password.length < 6) {
-      errors.push('Password must be at least 6 characters');
-    }
-    if (!/[A-Z]/.test(password)) {
-      errors.push('Must contain at least one uppercase letter');
-    }
-    if (!/[a-z]/.test(password)) {
-      errors.push('Must contain at least one lowercase letter');
-    }
-    return errors;
-  };
-
-  // src/pages/Register.jsx
-  const handleRegister = async e => {
-    e.preventDefault();
-    setErrors({});
-
-    const passwordErrors = validatePassword(formData.password);
-    if (passwordErrors.length > 0) {
-      setErrors({ password: passwordErrors });
-      return;
-    }
-
-    setLoading(true);
-
+  // Email/password registration
+  const onSubmit = async data => {
     try {
-      // Call register with role
-      const result = await register(
-        formData.email,
-        formData.password,
-        formData.name,
-        formData.photoURL,
-        formData.role
-      );
+      setLoading(true);
 
-      console.log('Registration result:', result);
+      // Firebase signup
+      const userCredential = await signup(data.email, data.password);
+      const user = userCredential.user;
 
-      // Navigate based on role
-      setTimeout(() => {
-        if (formData.role === 'vendor') {
-          navigate('/vendor-dashboard');
-        } else if (formData.role === 'admin') {
-          navigate('/admin-dashboard');
-        } else {
-          navigate('/dashboard');
-        }
-      }, 500);
+      // Register in MongoDB
+      await axios.post('/api/users/register', {
+        email: user.email,
+        name: data.name,
+        photoURL:
+          data.photoURL ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            data.name
+          )}&background=random`,
+        role: role,
+      });
+
+      toast.success('🎉 Registration successful! Welcome to TicketBari!');
+      navigate('/dashboard');
     } catch (error) {
       console.error('Registration error:', error);
-      // Error is already shown in register function
+
+      let errorMessage = 'Registration failed';
+      if (error.code === 'auth/email-already-in-use')
+        errorMessage = 'Email already in use';
+      else if (error.code === 'auth/weak-password')
+        errorMessage = 'Password is too weak';
+      else if (error.code === 'auth/invalid-email')
+        errorMessage = 'Invalid email address';
+
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  const handleGoogleLogin = async () => {
-    setLoading(true);
 
+  // Google Sign-in
+  const handleGoogleSignIn = async () => {
     try {
-      const result = await googleLogin();
-      const token = await result.user.getIdToken();
+      setLoading(true);
+      const user = await googlelogin();
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/users/social-login`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            email: result.user.email,
-            name: result.user.displayName,
-            photoURL: result.user.photoURL,
-          }),
-        }
-      );
+      await axios.post('/api/users/social-login', {
+        email: user.email,
+        name: user.displayName,
+        photoURL: user.photoURL,
+      });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        toast.success('Login successful! 🎉');
-        navigate('/');
-      } else {
-        toast.error(data.message || 'Login failed');
-      }
+      toast.success('✅ Registration successful with Google!');
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Google login error:', error);
-      toast.error(error.message || 'Google login failed');
+      console.error('Google registration error:', error);
+      toast.error(error.message || 'Failed to register with Google');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-12 px-4">
-      <div className="max-w-5xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8 items-center">
-          {/* Left Side - Info */}
-          <div className="hidden md:block">
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 text-white">
-              <h2 className="text-4xl font-bold mb-4">Join TicketBari</h2>
-              <p className="text-lg mb-6 opacity-90">
-                Book tickets for Bus, Train, Launch, and Flights with ease!
-              </p>
-
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <div className="bg-white/20 rounded-full p-2 mt-1">
-                    <svg
-                      className="w-5 h-5"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Easy Booking</h3>
-                    <p className="text-sm opacity-80">
-                      Book tickets in just a few clicks
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="bg-white/20 rounded-full p-2 mt-1">
-                    <svg
-                      className="w-5 h-5"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Secure Payment</h3>
-                    <p className="text-sm opacity-80">
-                      Pay securely with Stripe
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="bg-white/20 rounded-full p-2 mt-1">
-                    <svg
-                      className="w-5 h-5"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">24/7 Support</h3>
-                    <p className="text-sm opacity-80">
-                      Get help anytime you need
-                    </p>
-                  </div>
-                </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-orange-50/30 to-gray-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl w-full">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="flex justify-center mb-6">
+            <div className="relative">
+              <div className="w-24 h-24 bg-gradient-to-r from-[#FFA53A] via-[#FF8A2B] to-[#FF7A1B] rounded-2xl flex items-center justify-center shadow-2xl">
+                <FaBus className="text-white text-4xl" />
               </div>
-
-              <div className="mt-8">
-                <img
-                  src="https://img.freepik.com/free-vector/booking-concept-illustration_114360-1411.jpg"
-                  alt="Booking"
-                  className="rounded-lg opacity-90"
-                />
+              <div className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
+                <FaUsers className="text-white text-sm" />
               </div>
             </div>
           </div>
+          <h2 className="text-5xl font-bold bg-gradient-to-r from-[#FFA53A] via-[#FF8A2B] to-[#FF7A1B] bg-clip-text text-transparent animate-gradient mb-3">
+            Join TicketBari Family
+          </h2>
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Create your account and unlock exclusive travel experiences
+          </p>
+        </div>
 
-          {/* Right Side - Form */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">
-                Create Account
-              </h2>
-              <p className="text-gray-600">Sign up to get started</p>
+        <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-700">
+          <div className="md:flex">
+            {/* Left Side - Benefits */}
+            <div className="hidden md:block md:w-2/5 bg-gradient-to-br from-[#FFA53A] via-[#FF8A2B] to-[#FF7A1B] p-10">
+              <div className="text-white h-full flex flex-col justify-center">
+                <h3 className="text-3xl font-bold mb-8 flex items-center">
+                  <FaShieldAlt className="mr-3" />
+                  Why Join TicketBari?
+                </h3>
+                <ul className="space-y-6">
+                  <li className="flex items-start group">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-4 flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <FaCheckCircle className="text-xl" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-1">
+                        Secure Booking
+                      </h4>
+                      <p className="text-white/80 text-sm">
+                        End-to-end encrypted transactions
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex items-start group">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-4 flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <FaTicketAlt className="text-xl" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-1">
+                        Best Price Guarantee
+                      </h4>
+                      <p className="text-white/80 text-sm">
+                        We'll match or beat any price
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex items-start group">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-4 flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <FaUsers className="text-xl" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg mb-1">
+                        24/7 Support
+                      </h4>
+                      <p className="text-white/80 text-sm">
+                        Dedicated customer service team
+                      </p>
+                    </div>
+                  </li>
+                </ul>
+
+                <div className="mt-12 pt-8 border-t border-white/20">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center mr-4">
+                      <span className="text-2xl font-bold">1M+</span>
+                    </div>
+                    <div>
+                      <p className="text-sm opacity-80">Happy Travelers</p>
+                      <p className="text-lg font-semibold">
+                        Trusted by millions
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-5">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="Enter your full name"
-                />
+            {/* Right Side - Form */}
+            <div className="md:w-3/5 p-8 md:p-12">
+              {/* Social Register */}
+              <div className="mb-8">
+                <button
+                  onClick={handleGoogleSignIn}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center py-4 px-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-base font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-all duration-300 shadow-sm hover:shadow-md group disabled:opacity-50"
+                >
+                  <FaGoogle className="mr-3 text-red-500 text-lg" />
+                  <span className="group-hover:text-gray-900 dark:group-hover:text-white transition-colors duration-300">
+                    Sign up with Google
+                  </span>
+                </button>
               </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="Enter your email"
-                />
+              <div className="relative mb-10">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm font-medium">
+                    Or register with email
+                  </span>
+                </div>
               </div>
 
-              {/* Photo URL */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Photo URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  name="photoURL"
-                  value={formData.photoURL}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="Enter photo URL"
-                />
-              </div>
+              {/* Registration Form */}
+              <form className="space-y-8" onSubmit={handleSubmit(onSubmit)}>
+                {/* Name & Email */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <div className="flex items-center">
+                        <FaUser className="mr-2 text-[#FF7A1B]" />
+                        Full Name
+                      </div>
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="text"
+                        {...register('name', { required: 'Name is required' })}
+                        className="pl-12 w-full px-4 py-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FFA53A]/30 bg-white dark:bg-gray-700 dark:text-white transition-all duration-300 group-hover:border-gray-300 dark:group-hover:border-gray-500"
+                        placeholder="John Doe"
+                      />
+                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                        <FaUser className="h-5 w-5 text-gray-400 group-focus-within:text-[#FF7A1B]" />
+                      </div>
+                    </div>
+                    {errors.name && (
+                      <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center">
+                        <span className="mr-1">⚠</span> {errors.name.message}
+                      </p>
+                    )}
+                  </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <div className="flex items-center">
+                        <FaEnvelope className="mr-2 text-[#FF7A1B]" />
+                        Email Address
+                      </div>
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="email"
+                        {...register('email', {
+                          required: 'Email is required',
+                          pattern: {
+                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                            message: 'Invalid email address',
+                          },
+                        })}
+                        className="pl-12 w-full px-4 py-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FFA53A]/30 bg-white dark:bg-gray-700 dark:text-white transition-all duration-300 group-hover:border-gray-300 dark:group-hover:border-gray-500"
+                        placeholder="john@example.com"
+                      />
+                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                        <FaEnvelope className="h-5 w-5 text-gray-400 group-focus-within:text-[#FF7A1B]" />
+                      </div>
+                    </div>
+                    {errors.email && (
+                      <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center">
+                        <span className="mr-1">⚠</span> {errors.email.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Photo URL */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    <div className="flex items-center">
+                      <FaImage className="mr-2 text-[#FF7A1B]" />
+                      Profile Photo URL{' '}
+                      <span className="text-gray-500 text-xs ml-2">
+                        (Optional)
+                      </span>
+                    </div>
+                  </label>
+                  <div className="relative group">
+                    <input
+                      type="url"
+                      {...register('photoURL')}
+                      className="pl-12 w-full px-4 py-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FFA53A]/30 bg-white dark:bg-gray-700 dark:text-white transition-all duration-300 group-hover:border-gray-300 dark:group-hover:border-gray-500"
+                      placeholder="https://example.com/photo.jpg"
+                    />
+                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                      <FaImage className="h-5 w-5 text-gray-400 group-focus-within:text-[#FF7A1B]" />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Leave blank for auto-generated avatar
+                  </p>
+                </div>
+
+                {/* Password & Confirm Password */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <div className="flex items-center">
+                        <FaLock className="mr-2 text-[#FF7A1B]" />
+                        Password
+                      </div>
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        {...register('password', {
+                          validate: validatePassword,
+                        })}
+                        className="pl-12 pr-12 w-full px-4 py-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FFA53A]/30 bg-white dark:bg-gray-700 dark:text-white transition-all duration-300 group-hover:border-gray-300 dark:group-hover:border-gray-500"
+                        placeholder="••••••••"
+                      />
+                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                        <FaLock className="h-5 w-5 text-gray-400 group-focus-within:text-[#FF7A1B]" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200"
+                      >
+                        {showPassword ? (
+                          <FaEyeSlash className="h-5 w-5 text-gray-400 hover:text-[#FF7A1B]" />
+                        ) : (
+                          <FaEye className="h-5 w-5 text-gray-400 hover:text-[#FF7A1B]" />
+                        )}
+                      </button>
+                    </div>
+                    {errors.password && (
+                      <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center">
+                        <span className="mr-1">⚠</span>{' '}
+                        {errors.password.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <div className="flex items-center">
+                        <FaLock className="mr-2 text-[#FF7A1B]" />
+                        Confirm Password
+                      </div>
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        {...register('confirmPassword', {
+                          required: 'Please confirm your password',
+                          validate: value =>
+                            value === password || 'Passwords do not match',
+                        })}
+                        className={`pl-12 pr-12 w-full px-4 py-4 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FFA53A]/30 bg-white dark:bg-gray-700 dark:text-white transition-all duration-300 ${
+                          password &&
+                          watch('confirmPassword') &&
+                          password !== watch('confirmPassword')
+                            ? 'border-red-300 dark:border-red-500'
+                            : 'border-gray-200 dark:border-gray-600 group-hover:border-gray-300 dark:group-hover:border-gray-500'
+                        }`}
+                        placeholder="••••••••"
+                      />
+                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                        <FaLock className="h-5 w-5 text-gray-400 group-focus-within:text-[#FF7A1B]" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200"
+                      >
+                        {showConfirmPassword ? (
+                          <FaEyeSlash className="h-5 w-5 text-gray-400 hover:text-[#FF7A1B]" />
+                        ) : (
+                          <FaEye className="h-5 w-5 text-gray-400 hover:text-[#FF7A1B]" />
+                        )}
+                      </button>
+                    </div>
+                    {errors.confirmPassword && (
+                      <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center">
+                        <span className="mr-1">⚠</span>{' '}
+                        {errors.confirmPassword.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Type */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+                    Select Account Type
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <button
+                      type="button"
+                      onClick={() => setRole('user')}
+                      className={`p-6 border-2 rounded-xl text-left transition-all duration-300 group ${
+                        role === 'user'
+                          ? 'border-[#FF7A1B] bg-gradient-to-r from-[#FFA53A]/10 to-[#FF7A1B]/10 dark:from-[#FFA53A]/20 dark:to-[#FF7A1B]/20 shadow-lg scale-105'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-[#FFA53A] dark:hover:border-[#FF8A2B] hover:shadow-md'
+                      }`}
+                    >
+                      <div className="flex items-center mb-4">
+                        <div
+                          className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 ${
+                            role === 'user'
+                              ? 'bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B]'
+                              : 'bg-gray-100 dark:bg-gray-700'
+                          }`}
+                        >
+                          <FaUsers
+                            className={`text-xl ${
+                              role === 'user' ? 'text-white' : 'text-gray-400'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-gray-900 dark:text-white">
+                            Traveler
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Book tickets
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Perfect for individuals who want to book bus tickets
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRole('vendor')}
+                      className={`p-6 border-2 rounded-xl text-left transition-all duration-300 group ${
+                        role === 'vendor'
+                          ? 'border-green-500 bg-gradient-to-r from-green-500/10 to-emerald-500/10 dark:from-green-500/20 dark:to-emerald-500/20 shadow-lg scale-105'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-600 hover:shadow-md'
+                      }`}
+                    >
+                      <div className="flex items-center mb-4">
+                        <div
+                          className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 ${
+                            role === 'vendor'
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                              : 'bg-gray-100 dark:bg-gray-700'
+                          }`}
+                        >
+                          <FaStore
+                            className={`text-xl ${
+                              role === 'vendor' ? 'text-white' : 'text-gray-400'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-gray-900 dark:text-white">
+                            Vendor
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Sell tickets
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        For businesses who want to list and sell bus tickets
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Terms */}
+                <div className="flex items-start">
                   <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                    placeholder="Enter your password"
+                    id="terms"
+                    type="checkbox"
+                    {...register('terms', {
+                      required: 'You must accept the terms and conditions',
+                    })}
+                    className="h-5 w-5 mt-1 text-[#FFA53A] focus:ring-[#FFA53A] border-gray-300 rounded cursor-pointer"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  <label
+                    htmlFor="terms"
+                    className="ml-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
                   >
-                    {showPassword ? (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                        />
-                      </svg>
+                    I agree to the{' '}
+                    <Link
+                      to="/terms"
+                      className="font-semibold text-[#FF7A1B] hover:text-[#FFA53A] transition-colors duration-200"
+                    >
+                      Terms and Conditions
+                    </Link>{' '}
+                    and{' '}
+                    <Link
+                      to="/privacy"
+                      className="font-semibold text-[#FF7A1B] hover:text-[#FFA53A] transition-colors duration-200"
+                    >
+                      Privacy Policy
+                    </Link>
+                  </label>
+                </div>
+                {errors.terms && (
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center">
+                    <span className="mr-1">⚠</span> {errors.terms.message}
+                  </p>
+                )}
+
+                {/* Submit Button */}
+                <div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="group relative w-full flex justify-center items-center py-5 px-6 border border-transparent text-lg font-semibold rounded-xl text-white bg-gradient-to-r from-[#FFA53A] via-[#FF8A2B] to-[#FF7A1B] hover:from-[#FF8A2B] hover:via-[#FF7A1B] hover:to-[#FF6A0B] focus:outline-none focus:ring-4 focus:ring-[#FFA53A]/40 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none"
+                  >
+                    {loading ? (
+                      <span className="flex items-center">
+                        <svg
+                          className="animate-spin -ml-1 mr-3 h-6 w-6 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Creating Account...
+                      </span>
                     ) : (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
-                      </svg>
+                      <>
+                        <span>Create Account</span>
+                        <svg
+                          className="ml-3 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M14 5l7 7m0 0l-7 7m7-7H3"
+                          />
+                        </svg>
+                      </>
                     )}
                   </button>
                 </div>
-                {errors.password && (
-                  <ul className="mt-2 text-sm text-red-600 space-y-1">
-                    {errors.password.map((error, index) => (
-                      <li key={index} className="flex items-center space-x-1">
-                        <span>•</span>
-                        <span>{error}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              </form>
 
-              {/* Role Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Register as
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role: 'user' })}
-                    className={`py-3 px-4 rounded-lg border-2 transition duration-200 ${
-                      formData.role === 'user'
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 hover:border-blue-300'
-                    }`}
+              <div className="mt-10 pt-8 border-t border-gray-200 dark:border-gray-700 text-center">
+                <p className="text-base text-gray-600 dark:text-gray-400">
+                  Already have an account?{' '}
+                  <Link
+                    to="/login"
+                    className="font-bold text-[#FF7A1B] hover:text-[#FFA53A] transition-colors duration-200 inline-flex items-center group"
                   >
-                    <div className="font-semibold">User</div>
-                    <div className="text-xs text-gray-500">Book tickets</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role: 'vendor' })}
-                    className={`py-3 px-4 rounded-lg border-2 transition duration-200 ${
-                      formData.role === 'vendor'
-                        ? 'border-purple-500 bg-purple-50 text-purple-700'
-                        : 'border-gray-300 hover:border-purple-300'
-                    }`}
-                  >
-                    <div className="font-semibold">Vendor</div>
-                    <div className="text-xs text-gray-500">Sell tickets</div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Register Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center">
+                    <span>Sign in here</span>
                     <svg
-                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                      className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform duration-300"
                       fill="none"
+                      stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
                       <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M14 5l7 7m0 0l-7 7m7-7H3"
+                      />
                     </svg>
-                    Creating Account...
-                  </span>
-                ) : (
-                  'Create Account'
-                )}
-              </button>
-            </form>
-
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500 font-medium">
-                  Or continue with
-                </span>
+                  </Link>
+                </p>
               </div>
             </div>
-
-            {/* Google Login */}
-            <button
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transform hover:scale-105 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-md"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              Continue with Google
-            </button>
-
-            {/* Login Link */}
-            <p className="mt-6 text-center text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link
-                to="/login"
-                className="text-blue-600 font-semibold hover:text-blue-700 hover:underline"
-              >
-                Login here
-              </Link>
-            </p>
           </div>
         </div>
+
+        {/* Footer */}
+        <div className="mt-10 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            By creating an account, you agree to our Terms of Service and
+            Privacy Policy
+          </p>
+        </div>
       </div>
+
+      {/* Custom Styles */}
+      <style>{`
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .animate-gradient {
+          background-size: 200% auto;
+          animation: gradient 3s ease infinite;
+        }
+      `}</style>
     </div>
   );
 };

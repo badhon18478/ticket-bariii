@@ -30,6 +30,7 @@ import ManageTickets from '../pages/dashboard/admin/ManageTickets';
 import ManageUsers from '../pages/dashboard/admin/ManageUsers';
 import AdvertiseTickets from '../pages/dashboard/admin/AdvertiseTickets';
 import BookingPage from '../pages/Dashboard/user/BookingPage';
+import PaymentSuccess from '../components/tickets/PaymentSuccess ';
 
 const router = createBrowserRouter([
   {
@@ -85,6 +86,10 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       // User Routes
+      {
+        path: 'payment-success', // ✅
+        Component: PaymentSuccess,
+      },
       {
         path: 'user-profile',
         element: (

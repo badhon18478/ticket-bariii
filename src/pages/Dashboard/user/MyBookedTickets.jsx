@@ -1,141 +1,20 @@
-// ========== 1. User Dashboard - MyBookedTickets.jsx ==========
-import { useState, useEffect } from 'react';
-// import { useAuth } from '../../../contexts/AuthContext';
-import {
-  FaTicketAlt,
-  FaClock,
-  FaMapMarkerAlt,
-  FaCreditCard,
-  FaTimes,
-} from 'react-icons/fa';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  CardElement,
-  useStripe,
-  useElements,
-} from '@stripe/react-stripe-js';
+// src/pages/Dashboard/User/MyBookedTickets.jsx - COMPLETE WORKING VERSION
+
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { formatDistanceToNow } from 'date-fns';
-import { useAuth } from '../../../contexts/AuthProvider';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
-
-const PaymentForm = ({ booking, onSuccess, onCancel }) => {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [processing, setProcessing] = useState(false);
-
-  const handleSubmit = async e => {
-    e.preventDefault();
-    if (!stripe || !elements) return;
-
-    setProcessing(true);
-
-    try {
-      const { data } = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/create-payment-intent`,
-        { amount: booking.totalPrice }
-      );
-
-      const result = await stripe.confirmCardPayment(data.clientSecret, {
-        payment_method: {
-          card: elements.getElement(CardElement),
-        },
-      });
-
-      if (result.error) {
-        toast.error(result.error.message);
-      } else {
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/transactions`, {
-          bookingId: booking._id,
-          ticketId: booking.ticketId,
-          userEmail: booking.userEmail,
-          ticketTitle: booking.ticketTitle,
-          amount: booking.totalPrice,
-          quantity: booking.bookingQuantity,
-          transactionId: result.paymentIntent.id,
-          paymentDate: new Date(),
-        });
-
-        toast.success('Payment successful!');
-        onSuccess();
-      }
-    } catch (error) {
-      toast.error('Payment failed');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="card-ticket max-w-md w-full p-8 animate-scale-in">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">Complete Payment</h2>
-          <button onClick={onCancel} className="btn-ghost p-2">
-            <FaTimes />
-          </button>
-        </div>
-
-        <div className="mb-6 p-4 bg-secondary/50 rounded-lg">
-          <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
-          <p className="text-3xl font-bold gradient-text">
-            ${booking.totalPrice}
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium mb-3">
-              Card Details
-            </label>
-            <div className="p-4 border-2 border-input rounded-lg bg-background">
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: '16px',
-                      color: '#1e293b',
-                      '::placeholder': {
-                        color: '#94a3b8',
-                      },
-                    },
-                  },
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="btn-outline flex-1"
-              disabled={processing}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!stripe || processing}
-              className="btn-accent flex-1"
-            >
-              {processing ? 'Processing...' : `Pay $${booking.totalPrice}`}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
+import {
+  FaMapMarkerAlt,
+  FaCalendarAlt,
+  FaClock,
+  FaCreditCard,
+  FaTicketAlt,
+} from 'react-icons/fa';
 
 const MyBookedTickets = () => {
-  const { user } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedBooking, setSelectedBooking] = useState(null);
 
   useEffect(() => {
     fetchBookings();
@@ -143,170 +22,277 @@ const MyBookedTickets = () => {
 
   const fetchBookings = async () => {
     try {
+      const firebaseUser = window.firebase?.auth()?.currentUser;
+      if (!firebaseUser) {
+        toast.error('Please login again');
+        return;
+      }
+
+      const token = await firebaseUser.getIdToken();
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/bookings/user/${user.email}`
+        `${import.meta.env.VITE_API_URL}/api/bookings/my-bookings`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
-      setBookings(response.data);
+
+      console.log('📋 Bookings:', response.data);
+      setBookings(response.data.bookings || []);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('❌ Error fetching bookings:', error);
+      toast.error('Failed to load bookings');
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusBadge = status => {
-    const badges = {
-      pending: 'badge-pending',
-      accepted: 'badge-accepted',
-      rejected: 'badge-rejected',
-      paid: 'badge-paid',
-    };
-    return badges[status] || 'badge';
+  const handlePayment = async booking => {
+    try {
+      const firebaseUser = window.firebase?.auth()?.currentUser;
+      if (!firebaseUser) {
+        toast.error('Please login again');
+        return;
+      }
+
+      const token = await firebaseUser.getIdToken();
+
+      toast.loading('Creating payment session...');
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/create-checkout-session`,
+        {
+          bookingId: booking._id,
+          amount: booking.totalPrice,
+          quantity: booking.quantity,
+          ticketTitle: booking.ticketTitle,
+          userEmail: firebaseUser.email,
+          userName: firebaseUser.displayName,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      toast.dismiss();
+
+      if (response.data.success && response.data.url) {
+        window.location.href = response.data.url;
+      } else {
+        toast.error('Failed to create payment session');
+      }
+    } catch (error) {
+      toast.dismiss();
+      console.error('❌ Payment Error:', error);
+      toast.error(error.response?.data?.message || 'Payment failed');
+    }
   };
 
-  const canPay = booking => {
-    const now = new Date();
-    const departure = new Date(booking.departureDateTime);
-    return booking.status === 'accepted' && now < departure;
+  const calculateCountdown = departureDate => {
+    try {
+      const departure = new Date(departureDate);
+      const now = new Date();
+      const difference = departure - now;
+
+      if (difference <= 0) return 'Departed';
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor(
+        (difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      );
+      return `${days}d ${hours}h`;
+    } catch {
+      return 'Invalid';
+    }
+  };
+
+  const formatDate = dateString => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  const statusConfig = {
+    pending: {
+      bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+      text: 'text-yellow-700 dark:text-yellow-300',
+      label: 'Pending',
+    },
+    accepted: {
+      bg: 'bg-green-100 dark:bg-green-900/30',
+      text: 'text-green-700 dark:text-green-300',
+      label: 'Accepted',
+    },
+    rejected: {
+      bg: 'bg-red-100 dark:bg-red-900/30',
+      text: 'text-red-700 dark:text-red-300',
+      label: 'Rejected',
+    },
+    paid: {
+      bg: 'bg-blue-100 dark:bg-blue-900/30',
+      text: 'text-blue-700 dark:text-blue-300',
+      label: 'Paid ✓',
+    },
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-96">
-        <div
-          className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4"
-          style={{ borderColor: 'hsl(221 83% 53%)' }}
-        ></div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-16 h-16 border-4 border-[#FF7A1B] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="section-title">My Booked Tickets</h1>
-          <p className="text-muted-foreground">
-            View and manage your ticket bookings
-          </p>
-        </div>
-        <div className="badge badge-paid text-lg px-4 py-2">
-          {bookings.length} Bookings
-        </div>
-      </div>
+    <div className="max-w-7xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] bg-clip-text text-transparent mb-2">
+          My Booked Tickets
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'}{' '}
+          found
+        </p>
+      </motion.div>
 
       {bookings.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bookings.map((booking, index) => (
-            <div
-              key={booking._id}
-              className="card-ticket animate-slide-up"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div className="relative">
-                <img
-                  src={booking.image}
-                  alt={booking.ticketTitle}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="absolute top-4 right-4">
-                  <span
-                    className={`badge ${getStatusBadge(
-                      booking.status
-                    )} text-xs font-bold uppercase`}
-                  >
-                    {booking.status}
-                  </span>
-                </div>
-              </div>
+          <AnimatePresence>
+            {bookings.map((booking, index) => {
+              const canPay =
+                booking.status === 'accepted' &&
+                booking.paymentStatus !== 'paid' &&
+                new Date(booking.departure) > new Date();
 
-              <div className="p-5">
-                <h3 className="text-xl font-bold mb-3 line-clamp-1">
-                  {booking.ticketTitle}
-                </h3>
+              const status =
+                statusConfig[booking.status] || statusConfig.pending;
 
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FaMapMarkerAlt className="flex-shrink-0" />
-                    <span>
-                      {booking.from} → {booking.to}
-                    </span>
+              return (
+                <motion.div
+                  key={booking._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl overflow-hidden border border-gray-200 dark:border-slate-800"
+                >
+                  <div className="relative h-48">
+                    <img
+                      src={
+                        booking.image || 'https://via.placeholder.com/400x300'
+                      }
+                      alt={booking.ticketTitle}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute top-4 right-4">
+                      <span
+                        className={`${status.bg} ${status.text} px-4 py-2 rounded-full text-sm font-bold shadow-lg`}
+                      >
+                        {status.label}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FaTicketAlt className="flex-shrink-0" />
-                    <span>
-                      {booking.bookingQuantity} × ${booking.unitPrice}
-                    </span>
-                  </div>
+                  <div className="p-6 space-y-4">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white line-clamp-2">
+                      {booking.ticketTitle}
+                    </h3>
 
-                  <div className="p-3 bg-secondary/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Total Amount
-                    </p>
-                    <p className="text-2xl font-bold gradient-text">
-                      ${booking.totalPrice}
-                    </p>
-                  </div>
-                </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <FaMapMarkerAlt className="w-4 h-4 text-[#FF7A1B]" />
+                        <span className="text-sm">
+                          {booking.from} → {booking.to}
+                        </span>
+                      </div>
 
-                {booking.status !== 'rejected' && (
-                  <div className="glass-card p-3 rounded-lg mb-4 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Departs
-                    </p>
-                    <p className="font-semibold">
-                      {formatDistanceToNow(
-                        new Date(booking.departureDateTime),
-                        { addSuffix: true }
-                      )}
-                    </p>
-                  </div>
-                )}
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <FaCalendarAlt className="w-4 h-4 text-[#FF7A1B]" />
+                        <span className="text-sm">
+                          {formatDate(booking.departure)}
+                        </span>
+                      </div>
 
-                {canPay(booking) && (
-                  <button
-                    onClick={() => setSelectedBooking(booking)}
-                    className="btn-accent w-full flex items-center justify-center gap-2"
-                  >
-                    <FaCreditCard />
-                    Pay Now
-                  </button>
-                )}
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <FaClock className="w-4 h-4 text-[#FF7A1B]" />
+                        <span className="text-sm">
+                          {calculateCountdown(booking.departure)}
+                        </span>
+                      </div>
+                    </div>
 
-                {booking.status === 'paid' && (
-                  <div className="text-center py-2 text-success font-semibold">
-                    ✓ Payment Completed
+                    <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-slate-700">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Quantity
+                        </p>
+                        <p className="font-bold text-gray-900 dark:text-white">
+                          {booking.quantity} seats
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Total
+                        </p>
+                        <p className="font-bold text-xl text-[#FF7A1B]">
+                          ৳{booking.totalPrice}
+                        </p>
+                      </div>
+                    </div>
+
+                    {canPay && (
+                      <button
+                        onClick={() => handlePayment(booking)}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                      >
+                        <FaCreditCard className="w-5 h-5" />
+                        Pay Now
+                      </button>
+                    )}
+
+                    {booking.status === 'pending' && (
+                      <p className="text-center text-sm text-gray-500">
+                        Waiting for vendor confirmation
+                      </p>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       ) : (
-        <div className="text-center py-20 card-ticket">
-          <div className="text-6xl mb-4">🎫</div>
-          <h3 className="text-2xl font-bold mb-2">No Bookings Yet</h3>
-          <p className="text-muted-foreground mb-6">
-            Start exploring and book your first ticket
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl shadow-xl"
+        >
+          <FaTicketAlt className="w-16 h-16 text-gray-300 dark:text-slate-700 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+            No Bookings Yet
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Start booking your journey today!
           </p>
-          <a href="/all-tickets" className="btn-primary inline-block">
+          <motion.a
+            href="/all-tickets"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="inline-block px-8 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-xl shadow-lg"
+          >
             Browse Tickets
-          </a>
-        </div>
-      )}
-
-      {selectedBooking && (
-        <Elements stripe={stripePromise}>
-          <PaymentForm
-            booking={selectedBooking}
-            onSuccess={() => {
-              setSelectedBooking(null);
-              fetchBookings();
-            }}
-            onCancel={() => setSelectedBooking(null)}
-          />
-        </Elements>
+          </motion.a>
+        </motion.div>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../../contexts/AuthProvider';
+// import { useAuth } from '../../../contexts/AuthContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FiDollarSign, FiCalendar } from 'react-icons/fi';
+import { useAuth } from '../../../contexts/AuthProvider';
 
 const TransactionHistory = () => {
   const { user } = useAuth();

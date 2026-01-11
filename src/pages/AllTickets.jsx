@@ -1,5 +1,5 @@
 // ========== PREMIUM AllTickets.jsx - TicketBari Design ==========
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,6 +37,9 @@ const AllTickets = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalTickets, setTotalTickets] = useState(0);
 
+  // Debug state
+  const [apiResponse, setApiResponse] = useState(null);
+
   // Search & Filter States (URL Sync)
   const [searchFrom, setSearchFrom] = useState(searchParams.get('from') || '');
   const [searchTo, setSearchTo] = useState(searchParams.get('to') || '');
@@ -46,44 +49,88 @@ const AllTickets = () => {
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'latest');
   const [dateFilter, setDateFilter] = useState(searchParams.get('date') || '');
 
-  // Debounced search
-  const debounce = (func, delay) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
-    };
-  };
+  // Use ref for debounce
+  const debounceTimeout = useRef(null);
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
+
     try {
-      const params = new URLSearchParams({
-        page: currentPage,
-        limit: 12,
-      });
+      // First, try to fetch from the approved endpoint
+      let apiUrl = `${
+        import.meta.env.VITE_API_URL
+      }/api/tickets/approved?page=${currentPage}&limit=12`;
 
-      if (searchFrom) params.append('from', searchFrom);
-      if (searchTo) params.append('to', searchTo);
+      if (searchFrom) apiUrl += `&from=${searchFrom}`;
+      if (searchTo) apiUrl += `&to=${searchTo}`;
       if (filterType && filterType !== 'all')
-        params.append('transportType', filterType);
-      if (sortBy) params.append('sort', sortBy);
-      if (dateFilter) params.append('date', dateFilter);
+        apiUrl += `&transportType=${filterType}`;
+      if (sortBy) apiUrl += `&sort=${sortBy}`;
 
-      const { data } = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/tickets/approved?${params}`
-      );
+      console.log('🌐 Fetching from:', apiUrl);
 
-      setTickets(data.tickets || []);
-      setTotalPages(data.totalPages || 1);
-      setTotalTickets(data.totalCount || 0);
+      const response = await axios.get(apiUrl);
+      console.log('📦 API Response:', response.data);
+
+      // Handle different response structures
+      let ticketsData = [];
+      let total = 0;
+      let totalPagesData = 1;
+
+      // Case 1: Standard response with success and tickets
+      if (response.data && response.data.success === true) {
+        ticketsData = response.data.tickets || [];
+        total = response.data.total || ticketsData.length;
+        totalPagesData = response.data.totalPages || 1;
+      }
+      // Case 2: Direct array response (fallback)
+      else if (Array.isArray(response.data)) {
+        ticketsData = response.data;
+        total = response.data.length;
+        totalPagesData = 1;
+      }
+      // Case 3: Object with data array
+      else if (response.data && Array.isArray(response.data.data)) {
+        ticketsData = response.data.data;
+        total = response.data.total || response.data.data.length;
+        totalPagesData = response.data.totalPages || 1;
+      }
+      // Case 4: Try to find tickets in any key
+      else if (response.data && typeof response.data === 'object') {
+        Object.keys(response.data).forEach(key => {
+          if (Array.isArray(response.data[key])) {
+            ticketsData = response.data[key];
+          }
+        });
+        total = ticketsData.length;
+        totalPagesData = 1;
+      }
+
+      console.log('✅ Parsed tickets:', ticketsData.length);
+
+      setTickets(ticketsData);
+      setTotalPages(totalPagesData);
+      setTotalTickets(total);
+
+      if (ticketsData.length === 0) {
+        console.log('⚠️ No tickets found in database');
+        toast.info('No tickets available. Try adding some tickets first.');
+      }
     } catch (error) {
-      console.error('Error fetching tickets:', error);
-      toast.error(error.response?.data?.message || 'Failed to fetch tickets');
-      // Fallback mock data for demo
-      setTickets(generateMockTickets(12));
-      setTotalPages(5);
-      setTotalTickets(58);
+      console.error('❌ Error fetching tickets:', error);
+
+      // For development, show mock data
+      if (import.meta.env.DEV) {
+        const mockTickets = generateMockTickets(12);
+        setTickets(mockTickets);
+        setTotalPages(3);
+        setTotalTickets(36);
+        toast.success('Loaded mock data (Development Mode)');
+      } else {
+        toast.error(
+          'Failed to load tickets: ' + (error.message || 'Network error')
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -101,17 +148,23 @@ const AllTickets = () => {
     setSearchParams(params, { replace: true });
   }, [searchFrom, searchTo, filterType, sortBy, dateFilter, setSearchParams]);
 
+  // Fetch tickets on dependencies change
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
 
-  const debouncedSearch = debounce(() => {
-    setCurrentPage(1);
-  }, 500);
-
+  // Debounced search
   const handleSearchChange = setter => e => {
-    setter(e.target.value);
-    debouncedSearch();
+    const value = e.target.value;
+    setter(value);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    debounceTimeout.current = setTimeout(() => {
+      setCurrentPage(1);
+    }, 500);
   };
 
   const handleReset = () => {
@@ -123,10 +176,11 @@ const AllTickets = () => {
     setCurrentPage(1);
   };
 
-  // Mock data generator
+  // Enhanced mock data generator
   const generateMockTickets = count => {
     const transportTypes = ['bus', 'train', 'launch', 'plane'];
-    const destinations = [
+    const fromCities = ['Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi'];
+    const toCities = [
       'Chittagong',
       'Sylhet',
       "Cox's Bazar",
@@ -145,6 +199,7 @@ const AllTickets = () => {
     return Array.from({ length: count }, (_, i) => {
       const departureDate = new Date();
       departureDate.setDate(departureDate.getDate() + i + 1);
+      departureDate.setHours(8 + (i % 12), 0, 0, 0);
 
       const transport = transportTypes[i % 4];
       const transportCapitalized =
@@ -152,21 +207,31 @@ const AllTickets = () => {
 
       return {
         _id: `mock-${i}-${Date.now()}`,
-        title: `${transportCapitalized} Service ${i + 1}`,
-        from: 'Dhaka',
-        to: destinations[i % destinations.length],
+        title: `${transportCapitalized} Service - Premium ${i + 1}`,
+        from: fromCities[i % fromCities.length],
+        to: toCities[i % toCities.length],
         departureDateTime: departureDate.toISOString(),
+        departure: departureDate.toISOString(),
         transportType: transport,
-        price: 550 + i * 45,
-        ticketQuantity: 25 + i * 3,
+        price: Math.floor(550 + i * 45),
+        ticketQuantity: Math.floor(25 + i * 3),
+        quantity: Math.floor(25 + i * 3),
         image: `https://images.unsplash.com/photo-${
           ['1544620347', '1593642632827', '1566836610', '1512295767273'][i % 4]
         }?auto=format&fit=crop&w=500&h=300&q=80`,
-        perks: ['AC', 'WiFi', 'Water', 'Snacks'].slice(0, (i % 3) + 1),
+        perks: ['AC', 'WiFi', 'Water', 'Snacks', 'Charging Port'].slice(
+          0,
+          (i % 4) + 1
+        ),
         vendorName: vendors[i % vendors.length],
+        vendorEmail: `vendor${i}@example.com`,
         discount: i % 3 === 0 ? Math.floor(Math.random() * 30) + 10 : 0,
         isAdvertised: i % 4 === 0,
         isPremium: i % 5 === 0,
+        verificationStatus: 'approved',
+        isHidden: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
     });
   };
@@ -183,6 +248,65 @@ const AllTickets = () => {
     train: 'from-green-500 to-green-700',
     launch: 'from-cyan-500 to-cyan-700',
     plane: 'from-indigo-500 to-indigo-700',
+  };
+
+  // Format date safely
+  const formatDate = dateString => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return 'Invalid date';
+    }
+  };
+
+  // Debug button (visible only in development)
+  const DebugInfo = () => {
+    if (import.meta.env.DEV) {
+      return (
+        <div className="fixed bottom-4 right-4 z-50">
+          <details className="bg-black/80 text-white p-4 rounded-lg max-w-xs max-h-64 overflow-auto">
+            <summary className="cursor-pointer font-bold">Debug Info</summary>
+            <pre className="text-xs mt-2">
+              {JSON.stringify(
+                {
+                  loading,
+                  ticketsCount: tickets.length,
+                  currentPage,
+                  totalPages,
+                  totalTickets,
+                  searchParams: Object.fromEntries(searchParams),
+                  apiResponse: apiResponse ? 'Received' : 'None',
+                },
+                null,
+                2
+              )}
+            </pre>
+            <button
+              onClick={() => {
+                console.log('Full API Response:', apiResponse);
+                console.log('Tickets:', tickets);
+                fetchTickets();
+              }}
+              className="mt-2 px-3 py-1 bg-yellow-500 text-black text-xs rounded"
+            >
+              Refresh & Console Log
+            </button>
+          </details>
+        </div>
+      );
+    }
+    return null;
   };
 
   // Premium Skeleton - Smaller Cards
@@ -262,7 +386,7 @@ const AllTickets = () => {
               />
             </div>
 
-            {/* Date Filter */}
+            {/* Date Filter (Temporarily disabled) */}
             <div className="relative">
               <FaCalendarAlt className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
@@ -272,6 +396,7 @@ const AllTickets = () => {
                   setDateFilter(e.target.value);
                   setCurrentPage(1);
                 }}
+                min={new Date().toISOString().split('T')[0]}
                 className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-[#FF7A1B] focus:ring-2 focus:ring-[#FF7A1B]/30 transition-all"
               />
             </div>
@@ -318,7 +443,10 @@ const AllTickets = () => {
             {/* Action Buttons */}
             <div className="flex-1 flex justify-end space-x-3">
               <motion.button
-                onClick={() => setCurrentPage(1)}
+                onClick={() => {
+                  setCurrentPage(1);
+                  fetchTickets();
+                }}
                 className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -335,6 +463,17 @@ const AllTickets = () => {
                 <FiRefreshCw />
                 <span>Reset</span>
               </motion.button>
+              {/* Debug button */}
+              {import.meta.env.DEV && (
+                <motion.button
+                  onClick={fetchTickets}
+                  className="flex items-center space-x-2 px-5 py-2.5 bg-purple-600 text-white rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span>🔄 Refresh API</span>
+                </motion.button>
+              )}
             </div>
           </div>
         </motion.div>
@@ -358,10 +497,16 @@ const AllTickets = () => {
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Showing {tickets.length} results
             </span>
+            {import.meta.env.DEV && (
+              <span className="text-xs text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded">
+                DEV MODE:{' '}
+                {tickets[0]?._id?.includes('mock') ? 'Mock Data' : 'Real API'}
+              </span>
+            )}
           </div>
         </motion.div>
 
-        {/* Tickets Grid - Smaller Cards */}
+        {/* Tickets Grid */}
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div
@@ -382,22 +527,45 @@ const AllTickets = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
             >
-              <FaSearch className="w-24 h-24 text-gray-300 dark:text-slate-700 mx-auto mb-6" />
+              <div className="relative w-32 h-32 mx-auto mb-6">
+                <div className="absolute inset-0 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] rounded-full opacity-20 animate-pulse" />
+                <FaSearch className="w-full h-full text-gray-300 dark:text-slate-700 p-8" />
+              </div>
               <h3 className="text-2xl font-bold text-gray-500 dark:text-gray-400 mb-3">
                 No Tickets Found
               </h3>
-              <p className="text-gray-400 dark:text-gray-500 mb-8 max-w-md mx-auto">
-                Try adjusting your search criteria
+              <p className="text-gray-400 dark:text-gray-500 mb-6 max-w-md mx-auto">
+                {searchFrom || searchTo || filterType !== 'all' || dateFilter
+                  ? 'Try adjusting your search criteria or reset filters'
+                  : 'No tickets available at the moment'}
               </p>
-              <motion.button
-                onClick={handleReset}
-                className="inline-flex items-center space-x-3 px-8 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <span>Browse All Tickets</span>
-                <FaArrowRight />
-              </motion.button>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <motion.button
+                  onClick={handleReset}
+                  className="inline-flex items-center space-x-3 px-8 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span>Reset Filters</span>
+                  <FaArrowRight />
+                </motion.button>
+                {import.meta.env.DEV && (
+                  <motion.button
+                    onClick={() => {
+                      const mockTickets = generateMockTickets(12);
+                      setTickets(mockTickets);
+                      setTotalPages(3);
+                      setTotalTickets(36);
+                    }}
+                    className="inline-flex items-center space-x-3 px-8 py-3 bg-purple-600 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <span>Load Mock Data</span>
+                    <FaTicketAlt />
+                  </motion.button>
+                )}
+              </div>
             </motion.div>
           ) : (
             <motion.div
@@ -417,7 +585,7 @@ const AllTickets = () => {
 
                 return (
                   <motion.div
-                    key={ticket._id}
+                    key={ticket._id || `ticket-${index}`}
                     className="group bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-xl hover:shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden transition-all duration-500 hover:-translate-y-2"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -443,9 +611,15 @@ const AllTickets = () => {
                     {/* Image */}
                     <div className="relative mb-4 rounded-2xl overflow-hidden h-40">
                       <img
-                        src={ticket.image}
+                        src={
+                          ticket.image ||
+                          `https://via.placeholder.com/500x300?text=${ticket.transportType}+Ticket`
+                        }
                         alt={ticket.title}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        onError={e => {
+                          e.target.src = `https://via.placeholder.com/500x300?text=${ticket.transportType}+Ticket`;
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
@@ -454,7 +628,7 @@ const AllTickets = () => {
                     <div className="space-y-4">
                       {/* Title */}
                       <h3 className="text-lg font-bold text-gray-900 dark:text-white line-clamp-2 group-hover:text-[#FF7A1B] transition-colors">
-                        {ticket.title}
+                        {ticket.title || `${ticket.transportType} Service`}
                       </h3>
 
                       {/* Route */}
@@ -469,7 +643,8 @@ const AllTickets = () => {
                             Route
                           </div>
                           <div className="font-bold text-gray-900 dark:text-white">
-                            {ticket.from} → {ticket.to}
+                            {ticket.from || 'Unknown'} →{' '}
+                            {ticket.to || 'Unknown'}
                           </div>
                         </div>
                       </div>
@@ -483,9 +658,9 @@ const AllTickets = () => {
                               Departure
                             </div>
                             <div className="text-sm font-semibold">
-                              {new Date(
-                                ticket.departureDateTime
-                              ).toLocaleDateString('en-GB')}
+                              {formatDate(
+                                ticket.departureDateTime || ticket.departure
+                              )}
                             </div>
                           </div>
                         </div>
@@ -494,7 +669,7 @@ const AllTickets = () => {
                           <div>
                             <div className="text-xs text-gray-500">Price</div>
                             <div className="text-sm font-bold text-[#FF7A1B]">
-                              ৳{ticket.price}
+                              ৳{ticket.price || 'N/A'}
                             </div>
                           </div>
                         </div>
@@ -503,7 +678,7 @@ const AllTickets = () => {
                       {/* Seats & Discount */}
                       <div className="flex justify-between items-center">
                         <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-sm font-bold">
-                          {ticket.ticketQuantity} seats
+                          {ticket.ticketQuantity || ticket.quantity || 0} seats
                         </div>
                         {ticket.discount > 0 && (
                           <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-bold flex items-center space-x-1">
@@ -563,10 +738,17 @@ const AllTickets = () => {
               </button>
 
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const pageNum = Math.max(
-                  1,
-                  Math.min(totalPages - 4 + i, currentPage + i - 2)
-                );
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+
                 return (
                   <button
                     key={pageNum}
@@ -623,6 +805,9 @@ const AllTickets = () => {
           ))}
         </motion.div>
       </div>
+
+      {/* Debug Info Panel */}
+      <DebugInfo />
     </div>
   );
 };

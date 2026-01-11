@@ -1,138 +1,211 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { useTheme } from '../../context/ThemeContext';
+// src/components/Modal/BookingModal.jsx - NETWORK ERROR FIXED
 
-const BookingModal = ({ ticket, onClose, onSubmit }) => {
-  const { theme } = useTheme();
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import axios from 'axios';
+import { getAuth } from 'firebase/auth';
+
+const BookingModal = ({ ticket, onClose, onSuccess }) => {
   const [quantity, setQuantity] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleQuantityChange = e => {
-    const value = parseInt(e.target.value);
-    if (value > 0 && value <= ticket.ticketQuantity) {
-      setQuantity(value);
-    }
-  };
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async e => {
     e.preventDefault();
 
-    if (quantity < 1) {
+    const availableQuantity = ticket.ticketQuantity || ticket.quantity || 0;
+
+    if (quantity > availableQuantity) {
+      toast.error(`Only ${availableQuantity} seats available`);
       return;
     }
 
-    setIsSubmitting(true);
+    if (quantity < 1) {
+      toast.error('Quantity must be at least 1');
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      await onSubmit({ quantity });
-      onClose();
+      // Get Firebase Auth instance
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        toast.error('Please login again');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔑 Getting Firebase token...');
+
+      // Get fresh Firebase token
+      const token = await currentUser.getIdToken(true);
+
+      console.log('✅ Token received:', token ? 'Yes' : 'No');
+
+      const bookingData = {
+        ticketId: ticket._id,
+        quantity: parseInt(quantity),
+        ticketTitle: ticket.title,
+        from: ticket.from,
+        to: ticket.to,
+        transportType: ticket.transportType || 'bus',
+        unitPrice: ticket.price,
+        totalPrice: ticket.price * parseInt(quantity),
+        departure: ticket.departureDateTime || ticket.departure,
+        image: ticket.image,
+        vendorEmail: ticket.vendorEmail,
+        vendorName: ticket.vendorName,
+      };
+
+      console.log('📦 Booking Data:', bookingData);
+      console.log(
+        '🌐 API URL:',
+        `${import.meta.env.VITE_API_URL}/api/bookings`
+      );
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/bookings`,
+        bookingData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000, // 10 second timeout
+        }
+      );
+
+      console.log('✅ Booking Response:', response.data);
+
+      if (response.data.success) {
+        toast.success('Booking created successfully! 🎉');
+        onSuccess();
+        onClose();
+      } else {
+        throw new Error(response.data.message || 'Booking failed');
+      }
     } catch (error) {
-      console.error(error);
+      console.error('❌ Complete Error:', error);
+
+      let errorMessage = 'Booking failed. Please try again.';
+
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timeout. Please check your connection.';
+      } else if (error.response) {
+        // Server responded with error
+        console.error('Server Error:', error.response.data);
+        errorMessage =
+          error.response.data?.message ||
+          `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        // Request made but no response
+        console.error('No Response Error:', error.request);
+        errorMessage =
+          'Cannot connect to server. Please check:\n1. Server is running\n2. API URL is correct\n3. CORS is enabled';
+      } else {
+        // Other errors
+        console.error('Error:', error.message);
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className={`w-full max-w-md rounded-lg p-6 ${
-          theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-        }`}
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Book Ticket</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+  const totalPrice = (ticket.price * quantity).toFixed(2);
 
-        <div className="mb-4">
-          <h3 className="font-semibold mb-2">{ticket.title}</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 relative shadow-2xl animate-fadeIn">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
+          Book Ticket
+        </h2>
+
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-4 mb-6">
+          <h3 className="font-semibold text-lg mb-2 text-gray-800 dark:text-white">
+            {ticket.title}
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
             {ticket.from} → {ticket.to}
           </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Price per ticket: ${ticket.price}
+          <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            ৳{ticket.price}{' '}
+            <span className="text-sm text-gray-500">per seat</span>
           </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Available: {ticket.ticketQuantity} tickets
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            Available:{' '}
+            <span className="font-semibold text-green-600">
+              {ticket.ticketQuantity || ticket.quantity || 0} seats
+            </span>
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label
-              htmlFor="quantity"
-              className="block text-sm font-medium mb-2"
-            >
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Number of Tickets
             </label>
             <input
               type="number"
-              id="quantity"
               min="1"
-              max={ticket.ticketQuantity}
+              max={ticket.ticketQuantity || ticket.quantity || 1}
               value={quantity}
-              onChange={handleQuantityChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                theme === 'dark'
-                  ? 'bg-gray-700 border-gray-600'
-                  : 'bg-white border-gray-300'
-              }`}
+              onChange={e =>
+                setQuantity(Math.max(1, parseInt(e.target.value) || 1))
+              }
+              className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
 
-          <div className="mb-6">
+          <div className="bg-gray-50 dark:bg-slate-800 rounded-xl p-4 mb-6">
             <div className="flex justify-between items-center">
-              <span className="font-medium">Total Price:</span>
-              <span className="text-xl font-bold text-blue-500">
-                ${ticket.price * quantity}
+              <span className="text-gray-700 dark:text-gray-300 font-medium">
+                Total Amount:
+              </span>
+              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                ৳{totalPrice}
               </span>
             </div>
           </div>
 
-          <div className="flex space-x-3">
+          <div className="flex gap-3">
             <button
               type="button"
               onClick={onClose}
-              className={`flex-1 px-4 py-2 rounded-md border transition ${
-                theme === 'dark'
-                  ? 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
+              className="flex-1 px-4 py-3 border-2 border-gray-300 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 transition font-semibold text-gray-700 dark:text-gray-300"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition disabled:opacity-50"
+              disabled={loading}
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-[#FFA53A] to-[#FF7A1B] text-white rounded-xl hover:shadow-lg transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Processing...' : 'Confirm Booking'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Booking...
+                </span>
+              ) : (
+                'Confirm Booking'
+              )}
             </button>
           </div>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 };
